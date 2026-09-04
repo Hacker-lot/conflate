@@ -1,0 +1,9 @@
+@python
+words = ["hello", "from", "Python"]
+
+@cpp
+std::cout << words << "\n";
+int answer = 6 * 7;
+
+@python
+print(f"C++ returned {answer}")

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conflate-lang"
+version = "0.1.0"
+description = "An intuitive polyglot programming language"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Conflate contributors" }]
+
+[project.scripts]
+conflate = "conflate.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Hacker-lot/conflate"
+Documentation = "https://github.com/Hacker-lot/conflate/blob/main/DOCUMENTATION.md"
+Issues = "https://github.com/Hacker-lot/conflate/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
