@@ -587,7 +587,8 @@ impl<'a> Parser<'a> {
     fn value(&mut self) -> Result<Value, String> {
         self.space();
         if self.position >= self.text.len() { return self.fail("expected value"); }
-        match self.bytes()[self.position] {
+        let current = self.bytes()[self.position];
+        match current {
             b'"' => self.string().map(Value::String),
             b'[' => self.array(),
             b'{' => self.object(),
