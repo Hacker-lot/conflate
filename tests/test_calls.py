@@ -157,7 +157,7 @@ print('nested chain passed')
         root = Path(__file__).resolve().parents[1]
         cases = [
             ("persistent-service.confl", ("g++", "javac"), "counter survived"),
-            ("nested-functions.confl", ("g++", "javac", "go", "rustc"), "returned 42"),
+            ("nested-functions.confl", ("g++", "javac", "go", "rustc"), "Python: 42"),
             ("data-pipeline.confl", ("g++", "javac", "go", "rustc"), "Average: 20.5 C"),
             ("recoverable-errors.confl", ("javac", "rustc"), "next call returned 42"),
         ]
