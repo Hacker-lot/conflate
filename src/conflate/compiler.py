@@ -13,7 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .foreign import BackendError, ensure_go, ensure_java, ensure_rust
+from .foreign import BackendError, ensure_go, ensure_java, ensure_rust, ensure_javascript
+from .languages import registrations, active_toolchain, tool
+from .calls import Calls, extract, decorate, split_globals, worker_source
 
 
 class ConflateError(Exception):
@@ -47,6 +49,7 @@ CPP_DECLARATION = re.compile(
 
 
 def parse_program(text: str, filename: str = "<conflate>") -> list[Block]:
+    configured = registrations()
     blocks: list[Block] = []
     language: str | None = None
     block_start = 0
@@ -74,11 +77,30 @@ def parse_program(text: str, filename: str = "<conflate>") -> list[Block]:
         raise ConflateError(f"{filename}: no language blocks found")
 
     for block in blocks:
-        if block.language not in LANGUAGES:
+        if block.language not in LANGUAGES and block.language not in configured:
             raise ConflateError(
                 f"{filename}:{block.start_line - 1}: unsupported language @{block.language}"
             )
     return blocks
+
+
+def language_for(marker):
+    entry = registrations().get(marker, {})
+    active_toolchain.set(entry)
+    return entry.get("backend", LANGUAGES.get(marker, "external"))
+
+
+def prepare_program(blocks):
+    prepared, functions = [], []
+    for index, block in enumerate(blocks, 1):
+        language = language_for(block.language)
+        source, found = extract(block.source, language, index)
+        prepared.append(Block(block.language, source, block.start_line))
+        functions.extend(found)
+    names = [f.name for f in functions]
+    if len(names) != len(set(names)):
+        raise ConflateError("exported function names must be unique across language blocks")
+    return prepared, functions
 
 
 def _portable_value(value: Any, path: str) -> Any:
@@ -526,10 +548,11 @@ def _generated_cpp(
     state: dict[str, Any],
     source_path: Path,
 ) -> tuple[str, list[str]]:
+    globals_source, block_source = split_globals(block.source)
     valid_state = {name: value for name, value in state.items() if IDENTIFIER.match(name)}
     includes: list[str] = []
     body_lines: list[str] = []
-    for line in block.source.splitlines(keepends=True):
+    for line in block_source.splitlines(keepends=True):
         if line.lstrip().startswith("#include"):
             includes.append(line.strip())
             body_lines.append("\n" if line.endswith("\n") else "")
@@ -554,6 +577,7 @@ def _generated_cpp(
     escaped_path = str(source_path.resolve()).replace("\\", "\\\\").replace('"', '\\"')
     generated = f"""{os.linesep.join(includes)}
 {CPP_RUNTIME}
+{globals_source}
 
 int main(int argc, char** argv) {{
     if (argc != 2) {{
@@ -580,6 +604,8 @@ int main(int argc, char** argv) {{
 
 
 def _cpp_compiler() -> str:
+    if tool("cpp"):
+        return tool("cpp")
     compiler = os.environ.get("CXX") or shutil.which("g++") or shutil.which("clang++")
     if not compiler:
         raise ConflateError("no C++ compiler found; install g++ or clang++, or set CXX")
@@ -595,7 +621,7 @@ def _ensure_cpp_executable(
 ) -> tuple[Path, Path, list[str]]:
     placeholder_state = {name: None for name in state_names}
     source, output_names = _generated_cpp(block, placeholder_state, source_path)
-    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256((source + _cpp_compiler()).encode("utf-8")).hexdigest()[:16]
     block_dir = build_root / f"cpp-{index}-{digest}"
     block_dir.mkdir(parents=True, exist_ok=True)
     generated_path = block_dir / "block.cpp"
@@ -666,6 +692,8 @@ def _ensure_foreign_artifact(
     build_root: Path,
 ):
     try:
+        if language == "javascript":
+            return ensure_javascript(block.source, index, state_names, build_root)
         if language == "java":
             return ensure_java(block.source, index, state_names, build_root)
         if language == "go":
@@ -676,12 +704,14 @@ def _ensure_foreign_artifact(
 
 
 def _precompile_native_blocks(source: str, runtime_source_path: Path) -> None:
-    blocks = parse_program(source, str(runtime_source_path))
+    blocks, functions = prepare_program(parse_program(source, str(runtime_source_path)))
     build_root = runtime_source_path.parent / ".conflate" / "build"
     build_root.mkdir(parents=True, exist_ok=True)
     names: set[str] = set()
     for index, block in enumerate(blocks, start=1):
-        language = LANGUAGES[block.language]
+        language = language_for(block.language)
+        if language not in {"python", "external"}:
+            block = Block(block.language, decorate(block.source, language, functions), block.start_line)
         if language == "python":
             names.update(_python_assigned_names(block, runtime_source_path))
         elif language == "cpp":
@@ -689,10 +719,14 @@ def _precompile_native_blocks(source: str, runtime_source_path: Path) -> None:
                 block, index, names, runtime_source_path, build_root
             )
             names = set(output_names)
-        else:
+        elif language != "external":
             names = set(
                 _ensure_foreign_artifact(language, block, index, names, build_root).output_names
             )
+    runner = Runner(runtime_source_path)
+    runner.toolchains = {language_for(b.language): registrations().get(b.language, {}) for b in blocks}
+    for language in {f.language for f in functions} - {"python"}:
+        runner.prepare_worker(language, worker_source(language, [f for f in functions if f.language == language], functions))
 
 
 class Runner:
@@ -701,18 +735,59 @@ class Runner:
         self.build_root = (build_root or self.source_path.parent / ".conflate" / "build").resolve()
         self.environment: dict[str, Any] = {"__name__": "__conflate__"}
         self.state: dict[str, Any] = {}
+        self.calls = None
+        self.toolchains = {}
 
     def run(self) -> None:
-        blocks = parse_program(self.source_path.read_text(encoding="utf-8"), str(self.source_path))
+        blocks, functions = prepare_program(parse_program(self.source_path.read_text(encoding="utf-8"), str(self.source_path)))
         self.build_root.mkdir(parents=True, exist_ok=True)
-        for index, block in enumerate(blocks, start=1):
-            language = LANGUAGES[block.language]
-            if language == "python":
-                self._run_python(block)
-            elif language == "cpp":
-                self._run_cpp(block, index)
-            else:
-                self._run_foreign(language, block, index)
+        self.toolchains = {language_for(b.language): registrations().get(b.language, {}) for b in blocks}
+        self.calls = Calls(self, functions) if functions else None
+        try:
+            for index, block in enumerate(blocks, start=1):
+                language = language_for(block.language)
+                if self.calls:
+                    self.calls.activate(index)
+                if language == "python":
+                    self._run_python(block)
+                elif language == "external":
+                    self._run_external(block, index)
+                else:
+                    block = Block(block.language, decorate(block.source, language, functions), block.start_line)
+                    if language == "cpp":
+                        self._run_cpp(block, index)
+                    else:
+                        self._run_foreign(language, block, index)
+        except (ValueError, BackendError) as error:
+            raise ConflateError(str(error)) from error
+        finally:
+            if self.calls:
+                self.calls.close()
+
+    def prepare_worker(self, language, source):
+        active_toolchain.set(self.toolchains.get(language, {}))
+        if language == "cpp":
+            executable, _, _ = _ensure_cpp_executable(Block("cpp", source, 1), 0, set(), self.source_path, self.build_root)
+            return [str(executable)]
+        return _ensure_foreign_artifact(language, Block(language, source, 1), 0, set(), self.build_root).command
+
+    def _run_external(self, block, index):
+        entry = registrations()[block.language]
+        directory = self.build_root / ("external-" + str(index) + "-" + hashlib.sha256((block.source + json.dumps(entry)).encode()).hexdigest()[:16])
+        directory.mkdir(parents=True, exist_ok=True)
+        source = directory / ("block" + entry["extension"])
+        source.write_text(entry.get("template", "{source}").replace("{source}", block.source), encoding="utf-8")
+        output = directory / ("block.exe" if os.name == "nt" else "block")
+        state = directory / "state.json"
+        substitutions = {"source": str(source), "output": str(output), "state": str(state)}
+        self.calls.write(state, self.state) if self.calls else state.write_text(json.dumps(self.state), encoding="utf-8")
+        for command in ([entry["compile"]] if entry.get("compile") and not output.exists() else []) + [entry["run"]]:
+            result = subprocess.run([part.format_map(substitutions) for part in command], env=self.calls.environment() if self.calls else None)
+            if result.returncode:
+                raise ConflateError(f"@{block.language} command failed with exit code {result.returncode}")
+        self.state = json.loads(state.read_text(encoding="utf-8"))
+        if not isinstance(self.state, dict):
+            raise ConflateError("external language shared state must be an object")
 
     def _run_python(self, block: Block) -> None:
         self.environment.update(self.state)
@@ -723,13 +798,15 @@ class Runner:
         except Exception as error:
             raise ConflateError(f"Python block failed: {error}") from error
         self.state = _snapshot_python_environment(self.environment)
+        if self.calls:
+            self.calls.python_updates.clear()
 
     def _run_cpp(self, block: Block, index: int) -> None:
         executable, state_path, _ = _ensure_cpp_executable(
             block, index, set(self.state), self.source_path, self.build_root
         )
         state_path.write_text(json.dumps(self.state, ensure_ascii=False), encoding="utf-8")
-        result = subprocess.run([str(executable), str(state_path)])
+        result = subprocess.run([str(executable), str(state_path)], env=self.calls.environment() if self.calls else None)
         if result.returncode:
             raise ConflateError(f"C++ block failed with exit code {result.returncode}")
         try:
@@ -739,6 +816,9 @@ class Runner:
         if not isinstance(loaded, dict):
             raise ConflateError("C++ block shared state must be an object")
         self.state = loaded
+        if self.calls:
+            self.state.update(self.calls.python_updates)
+            self.calls.python_updates.clear()
 
     def _run_foreign(self, language: str, block: Block, index: int) -> None:
         artifact = _ensure_foreign_artifact(
@@ -747,7 +827,7 @@ class Runner:
         artifact.state_path.write_text(
             json.dumps(self.state, ensure_ascii=False), encoding="utf-8"
         )
-        result = subprocess.run([*artifact.command, str(artifact.state_path)])
+        result = subprocess.run([*artifact.command, str(artifact.state_path)], env=self.calls.environment() if self.calls else None)
         if result.returncode:
             raise ConflateError(f"{language.title()} block failed with exit code {result.returncode}")
         try:
@@ -757,6 +837,9 @@ class Runner:
         if not isinstance(loaded, dict):
             raise ConflateError(f"{language.title()} block shared state must be an object")
         self.state = loaded
+        if self.calls:
+            self.state.update(self.calls.python_updates)
+            self.calls.python_updates.clear()
 
 
 def check_file(source_path: Path) -> list[Block]:

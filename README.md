@@ -67,19 +67,53 @@ conflate -r helloWorld.exe
 - Python, C++, Rust, Java, and Go blocks execute from top to bottom.
 - Strings, numbers, booleans, lists, dictionaries, and `None` cross the boundary.
 - Simple native variables can return to later language blocks.
+- Functions stay callable across blocks. Native workers keep function state
+  until the program exits, and can call back into Python.
+- Register another compiler or enable JavaScript by pointing Conflate at Node.js.
 - Conflate generates entry points, state plumbing, and build commands.
 - Compiled blocks are cached and reused when only input values change.
 
 ## What does not
 
-- Functions cannot yet be called directly across languages.
 - The generated executable is a launcher, not a standalone binary. It still needs
   Python, Conflate, and a C++ compiler on the machine where it runs.
 - Native variable discovery is based on straightforward declarations, not full
   language parsers.
-- C#, JavaScript, and other languages are not implemented yet.
+- Automatic integration needs known language conventions. Other tools can run
+  through a command manifest; full value and function sharing needs a bridge.
 
-Those gaps are real. Conflate is version `0.2.0`, and the format may change.
+Conflate is version `0.3.0`, and the format may change.
+
+## Call a function across languages
+
+```cpp
+@python
+def square(n):
+    return n * n
+
+@cpp
+std::cout << square(12); // 144
+```
+
+C++ functions, Java methods, Go functions, Rust functions, and registered
+JavaScript functions can return values to Python too. See
+[`examples/functions.confl`](examples/functions.confl) for a counter that keeps
+its state while the program switches languages. Calls use JSON messages, so a
+call across languages costs more than a local function call.
+
+## Add a language
+
+```powershell
+conflate --add-language javascript node
+conflate --add-language mycpp "C:\Tools\LLVM\bin\clang++.exe"
+conflate --list-languages
+```
+
+Now `@javascript` and `@mycpp` work in `.confl` files. No Conflate source edits
+are needed. Python, g++/clang++, rustc, javac, go, and Node.js are recognized.
+For an unfamiliar compiler, a [command manifest](DOCUMENTATION.md#adding-languages)
+defines how to build and run its source. A compiler executable alone cannot
+describe an arbitrary language's values or function signatures.
 
 ## More detail
 

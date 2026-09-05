@@ -180,7 +180,7 @@ all five backends and checks the result when every toolchain is installed.
 
 ## Cross-language functions
 
-This does not work yet:
+Define an ordinary top-level function, then call it from another block:
 
 ```cpp
 @python
@@ -191,9 +191,105 @@ def square(n):
 std::cout << square(12);
 ```
 
-Supporting it properly requires persistent language workers and generated call
-proxies. Faking it with text substitution would break as soon as a function had
-state, side effects, or a non-trivial return type.
+This prints `144`. Functions become available when their defining block is
+reached, and remain available until the program exits. Function names must be
+unique across the file. Native workers are started on demand and reused; a
+C++ function's static variable keeps its value between calls. Python functions
+keep their normal globals and closures. These are in-memory lifetimes, not
+saved state between separate program runs.
+
+Native functions use ordinary declarations, with the header at the start of a
+line. Java methods are made static automatically. Arguments cross as JSON
+values; common scalar parameter types are converted at the worker boundary.
+Use the existing value conversion helpers on a returned value when the calling
+language needs a concrete type:
+
+| Caller | Example |
+| --- | --- |
+| Python | `answer = square(12)` |
+| C++ | `int answer = square(12).as<int>();` |
+| Java | `long answer = conflateInt(square(12));` |
+| Go | `answer := conflateInt(square(12))` |
+| Rust | `let answer = square(12).as_i64()?;` |
+| JavaScript | `let answer = square(12);` |
+
+See `examples/functions.confl` and `examples/java-functions.confl` for retained
+state and callbacks. The test suite also runs a nested call through C++, Java,
+Go, Rust, and Python.
+
+Calls are synchronous, have a 60-second timeout, and use a private temporary
+directory for messages. Standard input/output remain available to user code.
+Exceptions are returned to the caller; worker crashes report the exit code.
+Workers are shut down when execution ends, including on failure.
+
+Current boundaries:
+
+- Native functions cannot capture a preceding block's local variables. Pass
+  those values as arguments. Their own static state stays in their worker.
+- A callback into an already busy native worker is rejected. Ordinary recursion
+  within a native worker works; cross-language recursive cycles do not yet.
+- Generic signatures, overloads, receivers, async functions, pointers and
+  arbitrary objects are outside the exported function format. Rust exports
+  accept scalars, `String`, `&str`, or the generated `Value` type.
+- Function arguments and results are copied. Mutating a received list does not
+  mutate the caller's list; return the updated value explicitly.
+- Python globals changed by callbacks are retained when the enclosing native
+  block finishes. For a shared variable written by both, the callback's value
+  wins. Avoid writing the same shared variable on both sides in one block.
+
+## Adding languages
+
+Point Conflate at an installed toolchain:
+
+```powershell
+conflate --add-language javascript node
+conflate --add-language mycpp "C:\Tools\LLVM\bin\clang++.exe"
+conflate --add-language customrust "C:\Tools\rustc.exe"
+conflate --list-languages
+conflate --remove-language mycpp
+```
+
+Conflate recognizes Python, g++/clang++, rustc, javac, go, and Node.js by their
+executable names. Java registration also locates `java` next to `javac`. For a
+renamed compatible compiler, use `--backend cpp` (or `python`, `java`, `go`,
+`rust`, `javascript`). Registrations are saved in `~/.conflate/languages.json`.
+Set `CONFLATE_CONFIG` to use a different file, such as a project configuration.
+Removing a registration restores a built-in marker's default behavior.
+
+After registering Node.js, this works:
+
+```javascript
+@javascript
+function greet(name) { return "Hello, " + name; }
+let count = 42;
+@python
+assert count == 42
+print(greet("Conflate"))
+```
+
+An unfamiliar tool can be added with a JSON manifest, without changing
+Conflate's Python code. For example, a Ruby interpreter that runs whole blocks:
+
+```json
+{
+  "name": "ruby",
+  "extension": ".rb",
+  "run": ["ruby", "{source}"]
+}
+```
+
+Register it with `conflate --language-manifest ruby.json`. A compiled language
+can also supply `"compile": ["compiler", "{source}", "-o", "{output}"]` and
+`"run": ["{output}"]`. Commands are argument arrays, executed without a shell.
+Paths containing spaces stay single arguments. A `template` string may wrap
+`{source}` in the language's required entry point.
+
+The placeholders are `{source}` (generated file), `{output}` (binary), and
+`{state}` (shared JSON object). A manifest can pass `{state}` to an existing
+bridge executable, which reads it before the block and writes it afterward.
+Without that bridge, raw blocks run but do not automatically share variables
+or functions. The six recognized backends already supply their bridges.
+An arbitrary compiler path cannot supply missing syntax and calling conventions.
 
 ## Troubleshooting
 

@@ -1,0 +1,20 @@
+@python
+def twice(n):
+    return n * 2
+@java
+static long next(long n) {
+    class Holder { static long count = 0; }
+    Holder.count += n;
+    return Holder.count;
+}
+static long callback(long n) throws Exception {
+    return conflateInt(twice(n));
+}
+@python
+assert next(1) == 1
+@java
+long result = conflateInt(callback(21));
+@python
+assert result == 42
+assert next(1) == 2
+print("Java retained state and called Python.")

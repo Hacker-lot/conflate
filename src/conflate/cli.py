@@ -7,6 +7,7 @@ from pathlib import Path
 
 from . import __version__
 from .compiler import ConflateError, Runner, check_file, compile_executable
+from .languages import register, registrations, save, add_manifest
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -19,6 +20,11 @@ def _parser() -> argparse.ArgumentParser:
     action.add_argument("-c", "--compile", dest="compile_source", type=Path, metavar="FILE.CONFL")
     action.add_argument("-r", "--run", dest="run_executable", type=Path, metavar="FILE.EXE")
     action.add_argument("--check", dest="check_source", type=Path, metavar="FILE.CONFL")
+    action.add_argument("--add-language", nargs=2, metavar=("NAME", "COMPILER"))
+    action.add_argument("--remove-language", metavar="NAME")
+    action.add_argument("--list-languages", action="store_true")
+    action.add_argument("--language-manifest", type=Path)
+    parser.add_argument("--backend", choices=["python", "cpp", "java", "go", "rust", "javascript"])
     action.add_argument(
         "--execute-source",
         dest="run_source",
@@ -34,6 +40,25 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
+        if arguments.add_language:
+            entry = register(*arguments.add_language, arguments.backend)
+            print(f"Registered @{arguments.add_language[0]} using {entry['compiler']} ({entry['backend']})")
+            return 0
+        if arguments.language_manifest:
+            print(f"Registered @{add_manifest(arguments.language_manifest)}")
+            return 0
+        if arguments.remove_language:
+            entries = registrations()
+            if arguments.remove_language not in entries:
+                raise ConflateError(f"no registered language: {arguments.remove_language}")
+            del entries[arguments.remove_language]
+            save(entries)
+            return 0
+        if arguments.list_languages:
+            print("Built in: python, cpp, rust, java, go")
+            for name, entry in registrations().items():
+                print(f"@{name}: {entry['backend']} {entry.get('compiler', entry.get('run'))}")
+            return 0
         if arguments.compile_source is not None:
             source = arguments.compile_source
             if not source.is_file():
@@ -67,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
             blocks = check_file(source)
             print(f"OK: {len(blocks)} language block(s)")
         return 0
-    except ConflateError as error:
+    except (ConflateError, ValueError, OSError) as error:
         print(f"conflate: {error}", file=sys.stderr)
         return 1
 

@@ -8,6 +8,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from .languages import tool
+from .calls import split_globals
+
 
 class BackendError(Exception):
     pass
@@ -242,6 +245,8 @@ JAVA_RUNTIME = r'''
 
 
 def _tool(name: str, language: str) -> str:
+    if tool(name):
+        return tool(name)
     executable = shutil.which(name)
     if not executable:
         raise BackendError(f"{language} toolchain not found; install `{name}` and put it on PATH")
@@ -255,6 +260,7 @@ def _compile(command: list[str], language: str) -> None:
 
 
 def _artifact_dir(build_root: Path, language: str, index: int, source: str) -> tuple[Path, str]:
+    source += str(tool("javac" if language == "java" else language))
     digest = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
     directory = build_root / f"{language}-{index}-{digest}"
     directory.mkdir(parents=True, exist_ok=True)
@@ -262,6 +268,7 @@ def _artifact_dir(build_root: Path, language: str, index: int, source: str) -> t
 
 
 def _java_source(body: str, state_names: set[str]) -> tuple[str, list[str]]:
+    globals_source, body = split_globals(body)
     imports: list[str] = []
     body_lines: list[str] = []
     for line in body.splitlines(keepends=True):
@@ -289,6 +296,7 @@ import java.util.*;
 
 public final class ConflateBlock {{
 {JAVA_RUNTIME}
+{globals_source}
 
     static long conflateInt(Object value) {{ return ((Number) value).longValue(); }}
     static double conflateFloat(Object value) {{ return ((Number) value).doubleValue(); }}
@@ -340,6 +348,7 @@ GO_IMPORTS = {
 
 
 def _go_source(body: str, state_names: set[str]) -> tuple[str, list[str]]:
+    globals_source, body = split_globals(body)
     explicit_imports: list[tuple[str | None, str]] = []
     body_lines: list[str] = []
     import_pattern = re.compile(
@@ -360,7 +369,7 @@ def _go_source(body: str, state_names: set[str]) -> tuple[str, list[str]]:
     user_imports = [
         (None, path)
         for qualifier, path in GO_IMPORTS.items()
-        if path not in explicit_paths and re.search(rf"\b{qualifier}\s*\.", body)
+        if path not in explicit_paths and re.search(rf"\b{qualifier}\s*\.", body + globals_source)
     ]
     imports = "\n".join(
         f'    {(alias + " ") if alias else ""}"{path}"'
@@ -385,6 +394,7 @@ func conflateInt(value any) int64 {{ return int64(value.(float64)) }}
 func conflateFloat(value any) float64 {{ return value.(float64) }}
 func conflateString(value any) string {{ return value.(string) }}
 func conflateList(value any) []any {{ return value.([]any) }}
+{globals_source}
 
 func main() {{
     _conflateBytes, err := os.ReadFile(os.Args[1])
@@ -723,6 +733,7 @@ fn write_state(path: &str, state: &BTreeMap<String, Value>) -> Result<(), String
 
 
 def _rust_source(body: str, state_names: set[str]) -> tuple[str, list[str]]:
+    globals_source, body = split_globals(body)
     declarations = set(RUST_DECLARATION.findall(body))
     names = sorted(state_names | declarations)
     bindings = "\n".join(
@@ -737,6 +748,7 @@ use std::fmt;
 use std::fs;
 
 {RUST_RUNTIME}
+{globals_source}
 
 fn main() -> Result<(), String> {{
     let path = std::env::args().nth(1).ok_or_else(|| "missing state file".to_owned())?;
@@ -768,3 +780,23 @@ def ensure_rust(
             "Rust",
         )
     return Artifact([str(executable)], directory / "state.json", names)
+
+
+def ensure_javascript(body, index, state_names, build_root):
+    globals_source, body = split_globals(body)
+    declarations = set(re.findall(r"(?m)^(?:let|const|var)\s+([A-Za-z_]\w*)\s*=", body))
+    names = sorted(state_names | declarations)
+    bindings = "\n".join(f'let {name} = _conflateState["{name}"];' for name in sorted(state_names - declarations))
+    writes = "\n".join(f'_conflateState["{name}"] = {name};' for name in names)
+    source = f'''const fs = require('fs');
+{globals_source}
+const _conflateState = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+{bindings}
+{body}
+{writes}
+fs.writeFileSync(process.argv[2], JSON.stringify(_conflateState));
+'''
+    directory, _ = _artifact_dir(build_root, "javascript", index, source)
+    path = directory / "block.cjs"
+    path.write_text(source, encoding="utf-8")
+    return Artifact([_tool("node", "JavaScript"), str(path)], directory / "state.json", names)
