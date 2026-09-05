@@ -4,14 +4,14 @@
 
 <h1 align="center">Conflate</h1>
 
-<p align="center">Write Python. Drop into C++. Keep going.</p>
+<p align="center">Mix Python, C++, Rust, Java, and Go in one file.</p>
 
 Conflate is an experimental polyglot language runner. A `.confl` file contains
 ordinary language blocks, and variables move between them without handwritten
 bindings.
 
-It is small, early, and currently supports Python and C++. That is enough to
-test the idea before pretending we have solved every language boundary.
+It is still early, but the language pipeline is real: each native block is
+compiled by its own toolchain and shares state with the blocks around it.
 
 ## A quick example
 
@@ -44,8 +44,9 @@ Enter `10`; Conflate prints `55`.
 
 ## Install from source
 
-You need Python 3.11 or newer and a C++20 compiler named `g++` or `clang++` on
-your `PATH`.
+You need Python 3.11 or newer and a C++20 compiler named `g++` or `clang++`.
+Programs using other blocks also need their normal tools: `rustc`, `javac` plus
+`java`, or `go`. Put the commands on your `PATH`.
 
 ```powershell
 git clone https://github.com/Hacker-lot/conflate.git
@@ -63,21 +64,22 @@ conflate -r helloWorld.exe
 
 ## What works today
 
-- Python and C++ blocks execute from top to bottom.
+- Python, C++, Rust, Java, and Go blocks execute from top to bottom.
 - Strings, numbers, booleans, lists, dictionaries, and `None` cross the boundary.
-- Simple C++ variables can return to later Python blocks.
-- Conflate generates C++ entry points, headers, state plumbing, and build commands.
-- Compiled C++ blocks are cached and reused when only the input values change.
+- Simple native variables can return to later language blocks.
+- Conflate generates entry points, state plumbing, and build commands.
+- Compiled blocks are cached and reused when only input values change.
 
 ## What does not
 
 - Functions cannot yet be called directly across languages.
 - The generated executable is a launcher, not a standalone binary. It still needs
   Python, Conflate, and a C++ compiler on the machine where it runs.
-- C++ variable discovery is deliberately simple. It is not a full C++ parser.
-- Rust, Go, Java, C#, and other languages are ideas, not implemented features.
+- Native variable discovery is based on straightforward declarations, not full
+  language parsers.
+- C#, JavaScript, and other languages are not implemented yet.
 
-Those gaps are real. Conflate is version `0.1.0`, and the format may change.
+Those gaps are real. Conflate is version `0.2.0`, and the format may change.
 
 ## More detail
 

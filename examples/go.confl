@@ -1,0 +1,10 @@
+@python
+message = ["hello", "from", "Python"]
+seed = 40
+
+@go
+fmt.Println(message)
+answer := conflateInt(seed) + 2
+
+@python
+print(f"Go returned {answer}")

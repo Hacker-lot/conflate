@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .foreign import BackendError, ensure_go, ensure_java, ensure_rust
+
 
 class ConflateError(Exception):
     """A user-facing Conflate error."""
@@ -27,6 +29,17 @@ class Block:
 
 MARKER = re.compile(r"^\s*@([A-Za-z][A-Za-z0-9_+-]*)\s*$")
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+LANGUAGES = {
+    "python": "python",
+    "py": "python",
+    "cpp": "cpp",
+    "c++": "cpp",
+    "rust": "rust",
+    "rs": "rust",
+    "java": "java",
+    "go": "go",
+    "golang": "go",
+}
 CPP_DECLARATION = re.compile(
     r"(?m)^(?:const\s+)?(?:auto|bool|char|short|int|long(?:\s+long)?|float|double|"
     r"std::string|string|conflate::Value)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|\{|;)"
@@ -60,9 +73,8 @@ def parse_program(text: str, filename: str = "<conflate>") -> list[Block]:
     if not blocks:
         raise ConflateError(f"{filename}: no language blocks found")
 
-    supported = {"python", "py", "cpp", "c++"}
     for block in blocks:
-        if block.language not in supported:
+        if block.language not in LANGUAGES:
             raise ConflateError(
                 f"{filename}:{block.start_line - 1}: unsupported language @{block.language}"
             )
@@ -515,7 +527,15 @@ def _generated_cpp(
     source_path: Path,
 ) -> tuple[str, list[str]]:
     valid_state = {name: value for name, value in state.items() if IDENTIFIER.match(name)}
-    body = _normalize_cpp(block.source)
+    includes: list[str] = []
+    body_lines: list[str] = []
+    for line in block.source.splitlines(keepends=True):
+        if line.lstrip().startswith("#include"):
+            includes.append(line.strip())
+            body_lines.append("\n" if line.endswith("\n") else "")
+        else:
+            body_lines.append(line)
+    body = _normalize_cpp("".join(body_lines))
     declarations = set(CPP_DECLARATION.findall(body))
     names = sorted(set(valid_state) | declarations)
 
@@ -532,7 +552,8 @@ def _generated_cpp(
             f"conflate::write_json(_conflate_state, {name});"
         )
     escaped_path = str(source_path.resolve()).replace("\\", "\\\\").replace('"', '\\"')
-    generated = f"""{CPP_RUNTIME}
+    generated = f"""{os.linesep.join(includes)}
+{CPP_RUNTIME}
 
 int main(int argc, char** argv) {{
     if (argc != 2) {{
@@ -637,19 +658,41 @@ def _python_assigned_names(block: Block, source_path: Path) -> set[str]:
     return collector.names
 
 
-def _precompile_cpp_blocks(source: str, runtime_source_path: Path) -> None:
+def _ensure_foreign_artifact(
+    language: str,
+    block: Block,
+    index: int,
+    state_names: set[str],
+    build_root: Path,
+):
+    try:
+        if language == "java":
+            return ensure_java(block.source, index, state_names, build_root)
+        if language == "go":
+            return ensure_go(block.source, index, state_names, build_root)
+        return ensure_rust(block.source, index, state_names, build_root)
+    except BackendError as error:
+        raise ConflateError(str(error)) from error
+
+
+def _precompile_native_blocks(source: str, runtime_source_path: Path) -> None:
     blocks = parse_program(source, str(runtime_source_path))
     build_root = runtime_source_path.parent / ".conflate" / "build"
     build_root.mkdir(parents=True, exist_ok=True)
     names: set[str] = set()
     for index, block in enumerate(blocks, start=1):
-        if block.language in {"python", "py"}:
+        language = LANGUAGES[block.language]
+        if language == "python":
             names.update(_python_assigned_names(block, runtime_source_path))
-        else:
+        elif language == "cpp":
             _, _, output_names = _ensure_cpp_executable(
                 block, index, names, runtime_source_path, build_root
             )
             names = set(output_names)
+        else:
+            names = set(
+                _ensure_foreign_artifact(language, block, index, names, build_root).output_names
+            )
 
 
 class Runner:
@@ -663,10 +706,13 @@ class Runner:
         blocks = parse_program(self.source_path.read_text(encoding="utf-8"), str(self.source_path))
         self.build_root.mkdir(parents=True, exist_ok=True)
         for index, block in enumerate(blocks, start=1):
-            if block.language in {"python", "py"}:
+            language = LANGUAGES[block.language]
+            if language == "python":
                 self._run_python(block)
-            else:
+            elif language == "cpp":
                 self._run_cpp(block, index)
+            else:
+                self._run_foreign(language, block, index)
 
     def _run_python(self, block: Block) -> None:
         self.environment.update(self.state)
@@ -692,6 +738,24 @@ class Runner:
             raise ConflateError(f"C++ block produced invalid shared state: {error}") from error
         if not isinstance(loaded, dict):
             raise ConflateError("C++ block shared state must be an object")
+        self.state = loaded
+
+    def _run_foreign(self, language: str, block: Block, index: int) -> None:
+        artifact = _ensure_foreign_artifact(
+            language, block, index, set(self.state), self.build_root
+        )
+        artifact.state_path.write_text(
+            json.dumps(self.state, ensure_ascii=False), encoding="utf-8"
+        )
+        result = subprocess.run([*artifact.command, str(artifact.state_path)])
+        if result.returncode:
+            raise ConflateError(f"{language.title()} block failed with exit code {result.returncode}")
+        try:
+            loaded = json.loads(artifact.state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ConflateError(f"{language.title()} block produced invalid shared state: {error}") from error
+        if not isinstance(loaded, dict):
+            raise ConflateError(f"{language.title()} block shared state must be an object")
         self.state = loaded
 
 
@@ -773,7 +837,7 @@ int main() {{
     if result.returncode:
         raise ConflateError(f"launcher compilation failed with exit code {result.returncode}")
     runtime_source_path = Path(tempfile.gettempdir()) / f"conflate-{digest[:12]}.confl"
-    _precompile_cpp_blocks(source, runtime_source_path)
+    _precompile_native_blocks(source, runtime_source_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
         output_path.unlink()

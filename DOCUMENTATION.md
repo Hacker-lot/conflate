@@ -4,7 +4,7 @@ Conflate treats one source file as a sequence of language blocks. The marker at
 the start of a block chooses the language; the code below it stays ordinary code
 for that language.
 
-Version 0.1 supports Python and C++.
+Version 0.2 supports Python, C++, Rust, Java, and Go.
 
 ## File format
 
@@ -18,8 +18,17 @@ name = input("Your name: ")
 std::cout << "Hello, " << name << "!\n";
 ```
 
-Accepted markers are `@python`, `@py`, `@cpp`, and `@c++`. Code before the first
-marker is an error. Blocks run in file order.
+Accepted markers are:
+
+| Language | Markers |
+| --- | --- |
+| Python | `@python`, `@py` |
+| C++ | `@cpp`, `@c++` |
+| Rust | `@rust`, `@rs` |
+| Java | `@java` |
+| Go | `@go`, `@golang` |
+
+Code before the first marker is an error. Blocks run in file order.
 
 For simple one-line C++ statements, the final semicolon is optional:
 
@@ -65,20 +74,19 @@ conflate --check program.confl
 ## How execution works
 
 The compiler splits the file into blocks and creates a shared state dictionary.
-Python blocks run in one persistent Python environment. C++ blocks are wrapped in
-a generated entry point and compiled with the C++ compiler available on the
-machine.
+Python blocks run in one persistent Python environment. C++, Rust, Java, and Go
+blocks are wrapped in generated entry points and compiled by their normal
+toolchains.
 
-Between blocks, Conflate serializes supported values as JSON. C++ receives those
-values as `conflate::Value`; variables created by simple C++ declarations are
-written back for the next block.
+Between blocks, Conflate serializes supported values as JSON. Each native backend
+loads that state before its block and writes supported variables back afterward.
 
 The generated launcher embeds a snapshot of the `.confl` source. When launched,
 it uses the installed Conflate runtime to coordinate the blocks. This explains
 two current traits:
 
 - compilation is quick, but the result is not standalone;
-- the first run may be slower while C++ artifacts are prepared, then cached runs
+- the first run may be slower while native artifacts are prepared, then cached runs
   avoid rebuilding them.
 
 Generated files live in `.conflate/build` and are safe to delete.
@@ -94,6 +102,15 @@ Generated files live in `.conflate/build` and are safe to delete.
 | `str` | string `conflate::Value` |
 | `list` or `tuple` | array `conflate::Value` |
 | `dict[str, ...]` | object `conflate::Value` |
+
+Other backends receive the same data through their natural dynamic container:
+
+| Language | Incoming value |
+| --- | --- |
+| C++ | `conflate::Value` |
+| Rust | generated `Value` enum |
+| Java | `Object` containing `Long`, `Double`, `String`, `List`, or `Map` |
+| Go | `any`; JSON numbers arrive as `float64` |
 
 Functions, modules, classes, file handles, and custom Python objects stay inside
 Python. They are not silently copied or stringified.
@@ -115,7 +132,21 @@ auto text = value.as<std::string>();
 auto items = value.as<conflate::Value::array_t>();
 ```
 
-## Sending a C++ value back to Python
+The other generated runtimes provide small conversion helpers:
+
+```java
+long count = conflateInt(sharedCount);
+```
+
+```go
+count := conflateInt(sharedCount)
+```
+
+```rust
+let count = shared_count.as_i64()?;
+```
+
+## Sending a native value back
 
 Conflate recognizes straightforward declarations at the beginning of a line:
 
@@ -138,9 +169,14 @@ std::cin >> n;
 print(n)
 ```
 
-This recognizer covers common scalar types, `std::string`, `std::vector`,
-`conflate::Value`, and `auto` when the resulting value can be serialized. A
-declaration hidden inside a macro or complicated statement may not be found.
+Each backend recognizes common declarations at the start of a line: C++ scalar
+and standard container declarations, Java primitive and collection declarations,
+Go `var` and `:=`, and Rust `let`. A declaration hidden inside a macro, pattern,
+or complicated statement may not be found.
+
+Working examples are included in `examples/java.confl`, `examples/go.confl`, and
+`examples/rust.confl`. `examples/all-languages.confl` passes one value through
+all five backends and checks the result when every toolchain is installed.
 
 ## Cross-language functions
 
@@ -168,12 +204,13 @@ conflate -c helloWorld.confl
 conflate -r helloWorld.exe
 ```
 
-If no C++ compiler is found, install `g++` or `clang++` and put it on `PATH`.
-You can also set the `CXX` environment variable to the compiler executable.
+If a toolchain is missing, install the command named in the error: `g++` or
+`clang++` for the launcher and C++, `rustc` for Rust, `javac` plus `java` for
+Java, and `go` for Go. `CXX` can point Conflate at a specific C++ compiler.
 
-If a Python value is missing in C++, check that it is JSON-compatible. If a C++
-value is missing in Python, keep its declaration simple and at the beginning of
-a line.
+If a value is missing after crossing a block, check that it is JSON-compatible.
+For a native value moving out of a block, keep its declaration simple and at the
+beginning of a line.
 
 ## Development
 

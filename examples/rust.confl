@@ -1,0 +1,10 @@
+@python
+message = ["hello", "from", "Python"]
+seed = 40
+
+@rust
+println!("{}", message);
+let answer: i64 = seed.as_i64()? + 2;
+
+@python
+print(f"Rust returned {answer}")

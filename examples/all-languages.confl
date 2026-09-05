@@ -1,0 +1,18 @@
+@python
+seed = 40
+
+@cpp
+int cpp_value = seed.as<int>() + 2;
+
+@java
+long java_value = conflateInt(cpp_value) + 1;
+
+@go
+go_value := conflateInt(java_value) + 1
+
+@rust
+let rust_value: i64 = go_value.as_i64()? + 1;
+
+@python
+assert (seed, cpp_value, java_value, go_value, rust_value) == (40, 42, 43, 44, 45)
+print("Python -> C++ -> Java -> Go -> Rust -> Python: 40, 42, 43, 44, 45")

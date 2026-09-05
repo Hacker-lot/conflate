@@ -23,6 +23,44 @@ class ParserTests(unittest.TestCase):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_all_five_languages_in_one_program_when_installed(self) -> None:
+        tools = ("g++", "javac", "java", "go", "rustc")
+        if not all(__import__("shutil").which(tool) for tool in tools):
+            self.skipTest("all five language toolchains are required")
+        source = Path(__file__).resolve().parents[1] / "examples" / "all-languages.confl"
+        result = subprocess.run(
+            [sys.executable, "-m", "conflate", "--execute-source", str(source)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("40, 42, 43, 44, 45", result.stdout)
+
+    def test_java_go_and_rust_round_trip_when_installed(self) -> None:
+        cases = [
+            ("java", "javac", "System.out.println(message);\nlong answer = conflateInt(seed) + 2;", "Java"),
+            ("go", "go", "fmt.Println(message)\nanswer := conflateInt(seed) + 2", "Go"),
+            ("rust", "rustc", 'println!("{}", message);\nlet answer: i64 = seed.as_i64()? + 2;', "Rust"),
+        ]
+        for marker, tool, native_code, label in cases:
+            if not __import__("shutil").which(tool):
+                continue
+            with self.subTest(language=label), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / f"{marker}.confl"
+                source.write_text(
+                    "@python\nmessage = ['hello', 'languages']\nseed = 40\n"
+                    f"@{marker}\n{native_code}\n"
+                    f"@python\nprint('{label} returned', answer)\n",
+                    encoding="utf-8",
+                )
+                result = subprocess.run(
+                    [sys.executable, "-m", "conflate", "--execute-source", str(source)],
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"{label} returned 42", result.stdout)
+
     def test_run_rejects_source_file_without_traceback(self) -> None:
         if sys.platform != "win32":
             self.skipTest("Windows executable validation")

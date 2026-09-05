@@ -1,0 +1,10 @@
+@python
+message = ["hello", "from", "Python"]
+seed = 40
+
+@java
+System.out.println(message);
+long answer = conflateInt(seed) + 2;
+
+@python
+print(f"Java returned {answer}")
