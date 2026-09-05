@@ -1,0 +1,28 @@
+@python
+def finish(n):
+    return n + 1
+
+@rust
+fn from_rust(n: i64) -> i64 {
+    finish(n).as_i64().unwrap() + 1
+}
+
+@go
+func from_go(n int64) int64 {
+    return conflateInt(from_rust(n)) + 1
+}
+
+@java
+static long from_java(long n) throws Exception {
+    return conflateInt(from_go(n)) + 1;
+}
+
+@cpp
+int from_cpp(int n) {
+    return from_java(n).as<int>() + 1;
+}
+
+@python
+answer = from_cpp(37)
+assert answer == 42
+print("One call crossed C++, Java, Go, Rust, and Python:", answer)

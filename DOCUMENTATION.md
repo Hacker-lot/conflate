@@ -217,6 +217,16 @@ See `examples/functions.confl` and `examples/java-functions.confl` for retained
 state and callbacks. The test suite also runs a nested call through C++, Java,
 Go, Rust, and Python.
 
+The `examples` directory also has focused demonstrations:
+
+| File | What it demonstrates |
+| --- | --- |
+| `nested-functions.confl` | One nested call crossing every built-in language |
+| `data-pipeline.confl` | Lists and numeric results moving through four native backends |
+| `persistent-service.confl` | A C++ static counter called by Java and Python |
+| `recoverable-errors.confl` | A Rust panic crossing Java and being caught in Python |
+| `registered-javascript.confl` | Node.js registration and persistent JavaScript state |
+
 Calls are synchronous, have a 60-second timeout, and use a private temporary
 directory for messages. Standard input/output remain available to user code.
 Exceptions are returned to the caller; worker crashes report the exit code.

@@ -1,0 +1,22 @@
+@rust
+fn non_negative(n: i64) -> i64 {
+    assert!(n >= 0, "negative input rejected");
+    n * 2
+}
+
+@java
+static long calculate(long n) throws Exception {
+    return conflateInt(non_negative(n));
+}
+
+@python
+try:
+    calculate(-1)
+except ValueError as error:
+    assert "negative input rejected" in str(error)
+    print("Caught the Rust failure in Python.")
+else:
+    raise AssertionError("the error disappeared")
+
+assert calculate(21) == 42
+print("Both workers recovered; the next call returned 42.")

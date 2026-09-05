@@ -1,0 +1,17 @@
+# First run: conflate --add-language javascript node
+
+@javascript
+function slug(text) {
+    return text.trim().toLowerCase().replaceAll(" ", "-");
+}
+function next_build() {
+    next_build.number = (next_build.number || 0) + 1;
+    return next_build.number;
+}
+
+@python
+name = slug("  Conflate Release  ")
+builds = [next_build(), next_build(), next_build()]
+assert name == "conflate-release"
+assert builds == [1, 2, 3]
+print(f"{name}, build {builds[-1]}")

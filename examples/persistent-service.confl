@@ -1,0 +1,22 @@
+@cpp
+int next_id() {
+    static int id = 1000;
+    return ++id;
+}
+
+@java
+static String issue_ticket() throws Exception {
+    return "ticket-" + conflateInt(next_id());
+}
+
+@python
+tickets = [issue_ticket(), issue_ticket(), issue_ticket()]
+assert tickets == ["ticket-1001", "ticket-1002", "ticket-1003"]
+print(*tickets, sep="\n")
+
+@cpp
+std::cout << "Next native ID: " << next_id() << "\n";
+
+@python
+assert next_id() == 1005
+print("The C++ counter survived every language switch.")

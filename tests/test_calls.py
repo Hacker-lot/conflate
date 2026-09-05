@@ -153,6 +153,27 @@ print('nested chain passed')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("nested chain passed", result.stdout)
 
+    def test_showcase_examples(self):
+        root = Path(__file__).resolve().parents[1]
+        cases = [
+            ("persistent-service.confl", ("g++", "javac"), "counter survived"),
+            ("nested-functions.confl", ("g++", "javac", "go", "rustc"), "returned 42"),
+            ("data-pipeline.confl", ("g++", "javac", "go", "rustc"), "Average: 20.5 C"),
+            ("recoverable-errors.confl", ("javac", "rustc"), "next call returned 42"),
+        ]
+        for filename, tools, expected in cases:
+            if not all(shutil.which(tool) for tool in tools):
+                continue
+            with self.subTest(example=filename):
+                result = subprocess.run(
+                    [sys.executable, "-m", "conflate", "--execute-source", str(root / "examples" / filename)],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(expected, result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

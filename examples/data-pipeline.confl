@@ -1,0 +1,35 @@
+@python
+def readings():
+    return [18.5, 21.0, 19.5, 23.0, 20.5]
+
+@go
+func total(values []any) float64 {
+    sum := 0.0
+    for _, value := range values {
+        sum += value.(float64)
+    }
+    return sum
+}
+
+@cpp
+#include <algorithm>
+double clamp(double value, double low, double high) {
+    return std::max(low, std::min(value, high));
+}
+
+@rust
+fn average(sum: f64, count: i64) -> f64 {
+    sum / count as f64
+}
+
+@java
+static String report(double value) {
+    return String.format(Locale.ROOT, "Average: %.1f C", value);
+}
+
+@python
+values = readings()
+mean = average(total(values), len(values))
+message = report(clamp(mean, 0.0, 100.0))
+assert message == "Average: 20.5 C"
+print(message)

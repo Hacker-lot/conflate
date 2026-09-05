@@ -120,6 +120,19 @@ describe an arbitrary language's values or function signatures.
 Read [DOCUMENTATION.md](DOCUMENTATION.md) for the execution model, supported
 types, CLI reference, examples, and current limits.
 
+## Examples worth trying
+
+- [`nested-functions.confl`](examples/nested-functions.confl) sends one function
+  call through all five built-in languages and back.
+- [`data-pipeline.confl`](examples/data-pipeline.confl) passes a list through Go,
+  C++, Rust, and Java helpers before Python checks the result.
+- [`persistent-service.confl`](examples/persistent-service.confl) proves that a
+  C++ static counter survives calls from Java and Python.
+- [`recoverable-errors.confl`](examples/recoverable-errors.confl) catches a Rust
+  failure in Python, then calls the same Java and Rust workers again.
+- [`registered-javascript.confl`](examples/registered-javascript.confl) adds
+  Node.js without editing Conflate, then keeps JavaScript function state.
+
 Bug reports and small, focused pull requests are welcome. Start with
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
