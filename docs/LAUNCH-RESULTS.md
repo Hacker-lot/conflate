@@ -15,7 +15,7 @@ count: **1**. The target has not been reached.
 ## External outreach
 
 [PLDB language entry, PR #650](https://github.com/breck7/pldb/pull/650) is
-**open as a draft**, pending PLDB formatter/validation checks. It describes
+**ready for review** after Scroll formatting and entry validation passed. The maintainer responded positively and asked about local execution; Conflate source and build commands were rerun successfully. The PLDB HTML build hit a Windows output-path error, disclosed in the PR. It describes
 Conflate as a new programming language and includes the typed example, source,
 and specification. Do not mark this as a published listing.
 
