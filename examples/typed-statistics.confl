@@ -1,0 +1,17 @@
+@python(out: readings: list, unit: str)
+readings = [18.5, 20.0, 22.5, 21.0]
+unit = "C"
+
+@cpp(in: readings: list; out: mean: float, count: int)
+auto values = readings.as<conflate::Value::array_t>();
+double total = 0.0;
+for (const auto& reading : values) {
+    total += reading.as<double>();
+}
+int count = static_cast<int>(values.size());
+if (count == 0) { throw std::runtime_error("at least one reading is required"); }
+double mean = total / count;
+
+@python(in: mean: float, count: int, unit: str)
+assert count == 4 and mean == 20.5
+print(f"{count} readings; average {mean:.1f} {unit}")

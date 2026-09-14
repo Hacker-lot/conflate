@@ -4,14 +4,59 @@
 
 <h1 align="center">Conflate</h1>
 
-<p align="center">Mix Python, C++, Rust, Java, and Go in one file.</p>
+<p align="center">One program. Several languages. Explicit boundaries.</p>
 
-Conflate is an experimental polyglot language runner. A `.confl` file contains
-ordinary language blocks, and variables move between them without handwritten
-bindings.
+[![Tests](https://github.com/Hacker-lot/conflate/actions/workflows/tests.yml/badge.svg)](https://github.com/Hacker-lot/conflate/actions)
 
-It is still early, but the language pipeline is real: each native block is
-compiled by its own toolchain and shares state with the blocks around it.
+Conflate is an experimental polyglot programming language for composing Python,
+C++, Rust, Java, and Go in one `.confl` file. Keep each language's syntax, declare
+what crosses a block boundary, and let Conflate generate the value bridges and
+native entry points.
+
+Native code is compiled by real toolchains. Conflate's own language layer defines
+block order, shared values, typed inputs and outputs, and cross-language calls.
+It is useful for small mixed-language tools and experiments; JSON copying and
+process boundaries make it a poor fit for tight per-element cross-language loops.
+
+## Explicit boundaries
+
+```text
+@python(out: seed: int)
+seed = 40
+local_note = "This stays inside the block"
+
+@cpp(in: seed: int; out: answer: int)
+int answer = seed.as<int>() + 2;
+
+@python(in: answer: int)
+print(answer)  # 42
+```
+
+`in` names are required inputs; `out` names are the values a block publishes.
+Conflate checks their types at runtime and reports boundary failures at the
+source marker. A missing clause means an empty list. Bare `@python` and `@cpp`
+markers retain the earlier implicit sharing behavior.
+
+Read the [language specification](docs/LANGUAGE.md), or run
+[`typed-pipeline.confl`](examples/typed-pipeline.confl):
+
+```sh
+python -m pip install -e .
+conflate --doctor
+conflate --run-source examples/typed-pipeline.confl
+```
+
+## Prepare a local build
+
+```sh
+conflate --build examples/typed-pipeline.confl -o build/typed-pipeline
+conflate --run-build build/typed-pipeline
+```
+
+The build directory contains a source snapshot, manifest, and prepared native
+artifacts. Building does not execute your program. These are local builds for
+the current environment, not standalone or cross-platform distribution bundles.
+Python and Conflate remain required, alongside the native runtimes in use.
 
 ## A quick example
 
@@ -82,7 +127,7 @@ conflate -r helloWorld.exe
 - Automatic integration needs known language conventions. Other tools can run
   through a command manifest; full value and function sharing needs a bridge.
 
-Conflate is version `0.3.0`, and the format may change.
+Conflate is version `0.4.0`, and the format may change.
 
 ## Call a function across languages
 
@@ -121,6 +166,9 @@ Read [DOCUMENTATION.md](DOCUMENTATION.md) for the execution model, supported
 types, CLI reference, examples, and current limits.
 
 ## Examples worth trying
+
+- [`typed-statistics.confl`](examples/typed-statistics.confl) sends Python data
+  to a C++ loop and publishes only the mean and count for Python to format.
 
 - [`nested-functions.confl`](examples/nested-functions.confl) sends one function
   call through all five built-in languages and back.

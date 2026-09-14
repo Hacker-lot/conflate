@@ -267,7 +267,7 @@ def _artifact_dir(build_root: Path, language: str, index: int, source: str) -> t
     return directory, digest
 
 
-def _java_source(body: str, state_names: set[str]) -> tuple[str, list[str]]:
+def _java_source(body: str, state_names: set[str], output_names: set[str] | None = None) -> tuple[str, list[str]]:
     globals_source, body = split_globals(body)
     imports: list[str] = []
     body_lines: list[str] = []
@@ -279,7 +279,7 @@ def _java_source(body: str, state_names: set[str]) -> tuple[str, list[str]]:
             body_lines.append(line)
     body = "".join(body_lines)
     declarations = set(JAVA_DECLARATION.findall(body))
-    names = sorted(state_names | declarations)
+    names = sorted(state_names | declarations) if output_names is None else sorted(output_names)
     bindings = "\n".join(
         f'        Object {name} = _conflateState.get("{name}");'
         for name in sorted(state_names - declarations)
@@ -322,8 +322,9 @@ def ensure_java(
     index: int,
     state_names: set[str],
     build_root: Path,
+    output_names: set[str] | None = None,
 ) -> Artifact:
-    source, names = _java_source(body, state_names)
+    source, names = _java_source(body, state_names, output_names)
     directory, _ = _artifact_dir(build_root, "java", index, source)
     source_path = directory / "ConflateBlock.java"
     class_path = directory / "ConflateBlock.class"
@@ -347,7 +348,7 @@ GO_IMPORTS = {
 }
 
 
-def _go_source(body: str, state_names: set[str]) -> tuple[str, list[str]]:
+def _go_source(body: str, state_names: set[str], output_names: set[str] | None = None) -> tuple[str, list[str]]:
     globals_source, body = split_globals(body)
     explicit_imports: list[tuple[str | None, str]] = []
     body_lines: list[str] = []
@@ -364,7 +365,7 @@ def _go_source(body: str, state_names: set[str]) -> tuple[str, list[str]]:
     body = "".join(body_lines)
     declarations = set(GO_VAR.findall(body)) | set(GO_SHORT.findall(body))
     declarations.discard("_")
-    names = sorted(state_names | declarations)
+    names = sorted(state_names | declarations) if output_names is None else sorted(output_names)
     explicit_paths = {path for _, path in explicit_imports}
     user_imports = [
         (None, path)
@@ -417,8 +418,9 @@ def ensure_go(
     index: int,
     state_names: set[str],
     build_root: Path,
+    output_names: set[str] | None = None,
 ) -> Artifact:
-    source, names = _go_source(body, state_names)
+    source, names = _go_source(body, state_names, output_names)
     directory, _ = _artifact_dir(build_root, "go", index, source)
     source_path = directory / "block.go"
     executable = directory / ("block.exe" if os.name == "nt" else "block")
@@ -732,10 +734,10 @@ fn write_state(path: &str, state: &BTreeMap<String, Value>) -> Result<(), String
 '''
 
 
-def _rust_source(body: str, state_names: set[str]) -> tuple[str, list[str]]:
+def _rust_source(body: str, state_names: set[str], output_names: set[str] | None = None) -> tuple[str, list[str]]:
     globals_source, body = split_globals(body)
     declarations = set(RUST_DECLARATION.findall(body))
-    names = sorted(state_names | declarations)
+    names = sorted(state_names | declarations) if output_names is None else sorted(output_names)
     bindings = "\n".join(
         f'    let mut {name} = _conflate_state.remove("{name}").unwrap_or(Value::Null);'
         for name in sorted(state_names - declarations)
@@ -768,8 +770,9 @@ def ensure_rust(
     index: int,
     state_names: set[str],
     build_root: Path,
+    output_names: set[str] | None = None,
 ) -> Artifact:
-    source, names = _rust_source(body, state_names)
+    source, names = _rust_source(body, state_names, output_names)
     directory, _ = _artifact_dir(build_root, "rust", index, source)
     source_path = directory / "block.rs"
     executable = directory / ("block.exe" if os.name == "nt" else "block")
@@ -782,10 +785,10 @@ def ensure_rust(
     return Artifact([str(executable)], directory / "state.json", names)
 
 
-def ensure_javascript(body, index, state_names, build_root):
+def ensure_javascript(body, index, state_names, build_root, output_names=None):
     globals_source, body = split_globals(body)
     declarations = set(re.findall(r"(?m)^(?:let|const|var)\s+([A-Za-z_]\w*)\s*=", body))
-    names = sorted(state_names | declarations)
+    names = sorted(state_names | declarations) if output_names is None else sorted(output_names)
     bindings = "\n".join(f'let {name} = _conflateState["{name}"];' for name in sorted(state_names - declarations))
     writes = "\n".join(f'_conflateState["{name}"] = {name};' for name in names)
     source = f'''const fs = require('fs');

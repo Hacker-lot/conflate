@@ -1,0 +1,10 @@
+@python(out: seed: int, label: str)
+seed = 14
+label = "typed pipeline"
+
+@cpp(in: seed: int; out: answer: int)
+int answer = seed.as<int>() * 3;
+std::cout << "C++ computed " << answer << "\n";
+
+@python(in: answer: int, label: str)
+print(f"{label}: {answer}")

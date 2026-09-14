@@ -4,7 +4,9 @@ Conflate treats one source file as a sequence of language blocks. The marker at
 the start of a block chooses the language; the code below it stays ordinary code
 for that language.
 
-Version 0.2 supports Python, C++, Rust, Java, and Go.
+Version 0.4 supports Python, C++, Rust, Java, and Go. The
+[language specification](docs/LANGUAGE.md) defines explicit typed block
+contracts. Bare markers retain the implicit sharing described below.
 
 ## File format
 
@@ -40,6 +42,26 @@ std::cout << "hello"
 Normal C++ syntax is still recommended once a block grows beyond a line or two.
 
 ## Command line
+
+Run source directly with `conflate --run-source program.confl`. Use
+`conflate --doctor` to inspect available toolchains.
+
+Prepare a local build without executing the program:
+
+```sh
+conflate --build program.confl -o build/program
+conflate --run-build build/program
+```
+
+This creates a source snapshot, manifest, and native cache. Keep the build in
+the environment where it was created. It still needs Python, Conflate, and the
+appropriate language runtimes. Legacy blocks with dynamically created shared
+names can require additional compilation at runtime. Explicit input lists make
+the native block's imported names known during the build.
+
+Registered command-manifest backends execute their build commands at runtime;
+`--build` prepares the recognized backends only. Keep the same toolchains on
+`PATH` when running a build. Changed registration settings require a rebuild.
 
 Compile a source file:
 

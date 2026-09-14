@@ -3,12 +3,14 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,10 +29,13 @@ class Block:
     language: str
     source: str
     start_line: int
+    inputs: dict[str, str] | None = None
+    outputs: dict[str, str] | None = None
 
 
-MARKER = re.compile(r"^\s*@([A-Za-z][A-Za-z0-9_+-]*)\s*$")
+MARKER = re.compile(r"^\s*@([A-Za-z][A-Za-z0-9_+-]*)(?:\((.*)\))?\s*$")
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+CONTRACT_TYPES = {"int", "float", "bool", "str", "list", "dict", "any"}
 LANGUAGES = {
     "python": "python",
     "py": "python",
@@ -48,19 +53,69 @@ CPP_DECLARATION = re.compile(
 )
 
 
+def _parse_contract(spec: str | None, filename: str, line_number: int) -> tuple[dict[str, str] | None, dict[str, str] | None]:
+    if spec is None:
+        return None, None
+    if not spec.strip():
+        return {}, {}
+
+    clauses: dict[str, dict[str, str]] = {}
+    for raw_clause in spec.split(";"):
+        clause = raw_clause.strip()
+        if not clause:
+            raise ConflateError(f"{filename}:{line_number}: empty contract clause")
+        match = re.fullmatch(r"(in|out)\s*:\s*(.+)", clause, re.IGNORECASE)
+        if not match:
+            raise ConflateError(
+                f"{filename}:{line_number}: expected `in:` or `out:` contract clause"
+            )
+        direction = match.group(1).lower()
+        if direction in clauses:
+            raise ConflateError(f"{filename}:{line_number}: duplicate `{direction}:` clause")
+        entries: dict[str, str] = {}
+        for raw_entry in match.group(2).split(","):
+            entry = raw_entry.strip()
+            entry_match = re.fullmatch(
+                r"([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)", entry
+            )
+            if not entry_match:
+                raise ConflateError(
+                    f"{filename}:{line_number}: expected `name: type` in `{direction}:` clause"
+                )
+            name, value_type = entry_match.groups()
+            value_type = value_type.lower()
+            if value_type not in CONTRACT_TYPES:
+                supported = ", ".join(sorted(CONTRACT_TYPES))
+                raise ConflateError(
+                    f"{filename}:{line_number}: unsupported contract type `{value_type}`; "
+                    f"expected one of {supported}"
+                )
+            if name in entries:
+                raise ConflateError(f"{filename}:{line_number}: duplicate contract name `{name}`")
+            entries[name] = value_type
+        clauses[direction] = entries
+
+    inputs = clauses.get("in")
+    outputs = clauses.get("out")
+    return inputs or {}, outputs or {}
+
+
 def parse_program(text: str, filename: str = "<conflate>") -> list[Block]:
     configured = registrations()
     blocks: list[Block] = []
     language: str | None = None
     block_start = 0
     lines: list[str] = []
+    inputs: dict[str, str] | None = None
+    outputs: dict[str, str] | None = None
 
     for line_number, line in enumerate(text.splitlines(keepends=True), start=1):
         marker = MARKER.match(line.rstrip("\r\n"))
         if marker:
             if language is not None:
-                blocks.append(Block(language, "".join(lines), block_start))
+                blocks.append(Block(language, "".join(lines), block_start, inputs, outputs))
             language = marker.group(1).lower()
+            inputs, outputs = _parse_contract(marker.group(2), filename, line_number)
             block_start = line_number + 1
             lines = []
         elif language is None:
@@ -72,7 +127,7 @@ def parse_program(text: str, filename: str = "<conflate>") -> list[Block]:
             lines.append(line)
 
     if language is not None:
-        blocks.append(Block(language, "".join(lines), block_start))
+        blocks.append(Block(language, "".join(lines), block_start, inputs, outputs))
     if not blocks:
         raise ConflateError(f"{filename}: no language blocks found")
 
@@ -94,8 +149,11 @@ def prepare_program(blocks):
     prepared, functions = [], []
     for index, block in enumerate(blocks, 1):
         language = language_for(block.language)
-        source, found = extract(block.source, language, index)
-        prepared.append(Block(block.language, source, block.start_line))
+        try:
+            source, found = extract(block.source, language, index)
+        except SyntaxError as error:
+            raise ConflateError(f"Python syntax error: {error}") from error
+        prepared.append(Block(block.language, source, block.start_line, block.inputs, block.outputs))
         functions.extend(found)
     names = [f.name for f in functions]
     if len(names) != len(set(names)):
@@ -103,13 +161,147 @@ def prepare_program(blocks):
     return prepared, functions
 
 
-def _portable_value(value: Any, path: str) -> Any:
+def _contract_portable(value: Any, seen: set[int] | None = None) -> bool:
+    if value is None or type(value) is bool or type(value) is str:
+        return True
+    if type(value) is int:
+        return -(2**63) <= value < 2**63
+    if type(value) is float:
+        return math.isfinite(value)
+    if type(value) not in {list, dict}:
+        return False
+    seen = set() if seen is None else seen
+    identity = id(value)
+    if identity in seen:
+        return False
+    seen.add(identity)
+    try:
+        if type(value) is list:
+            return all(_contract_portable(child, seen) for child in value)
+        return all(
+            type(key) is str and _contract_portable(child, seen)
+            for key, child in value.items()
+        )
+    finally:
+        seen.remove(identity)
+
+
+def _contract_type_matches(value: Any, value_type: str) -> bool:
+    if not _contract_shape_matches(value, value_type):
+        return False
+    return _contract_portable(value)
+
+
+def _contract_shape_matches(value: Any, value_type: str) -> bool:
+    if value_type == "any":
+        return True
+    if value_type == "int":
+        return type(value) is int
+    if value_type == "float":
+        return type(value) in {int, float}
+    if value_type == "bool":
+        return type(value) is bool
+    if value_type == "str":
+        return type(value) is str
+    if value_type == "list":
+        return type(value) is list
+    if value_type == "dict":
+        return type(value) is dict
+    return False
+
+
+def _contract_location(block: Block, source_path: Path) -> str:
+    return f"{source_path}:{block.start_line - 1}"
+
+
+def _has_contract(block: Block) -> bool:
+    return block.inputs is not None or block.outputs is not None
+
+
+def _validate_contract_inputs(block: Block, state: dict[str, Any], source_path: Path) -> dict[str, Any]:
+    if not _has_contract(block):
+        return dict(state)
+    location = _contract_location(block, source_path)
+    imported: dict[str, Any] = {}
+    for name, value_type in block.inputs.items():
+        if name not in state:
+            raise ConflateError(f"{location}: missing required input `{name}`")
+        value = state[name]
+        if not _contract_type_matches(value, value_type):
+            actual = type(value).__name__
+            raise ConflateError(
+                f"{location}: input `{name}` expected {value_type}, got {actual}"
+            )
+        imported[name] = _portable_value(value, name)
+    return imported
+
+
+def _validate_contract_outputs(
+    block: Block, loaded: dict[str, Any], source_path: Path
+) -> dict[str, Any]:
+    if not _has_contract(block):
+        return loaded
+    if block.outputs is None:
+        return {}
+    location = _contract_location(block, source_path)
+    output_values: dict[str, Any] = {}
+    for name, value_type in block.outputs.items():
+        if name not in loaded:
+            raise ConflateError(f"{location}: missing required output `{name}`")
+        value = loaded[name]
+        if not _contract_type_matches(value, value_type):
+            if _contract_shape_matches(value, value_type) and not _contract_portable(value):
+                raise ConflateError(
+                    f"{location}: output `{name}` is not a finite portable value"
+                )
+            actual = type(value).__name__
+            raise ConflateError(
+                f"{location}: output `{name}` expected {value_type}, got {actual}"
+            )
+        output_values[name] = value
+    return output_values
+
+
+def _merge_contract_state(
+    block: Block, previous: dict[str, Any], loaded: dict[str, Any], source_path: Path
+) -> dict[str, Any]:
+    if not _has_contract(block):
+        return loaded
+    outputs = _validate_contract_outputs(block, loaded, source_path)
+    state = dict(previous)
+    state.update(outputs)
+    return state
+
+
+def _contract_python_outputs(
+    block: Block, environment: dict[str, Any], source_path: Path
+) -> dict[str, Any]:
+    outputs = _validate_contract_outputs(block, environment, source_path)
+    return {name: _portable_value(value, name) for name, value in outputs.items()}
+
+
+def _portable_value(value: Any, path: str, _seen: set[int] | None = None) -> Any:
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
+    _seen = set() if _seen is None else _seen
+    identity = id(value)
+    if identity in _seen:
+        raise TypeError(f"{path} contains a cyclic value")
     if isinstance(value, (list, tuple)):
-        return [_portable_value(item, f"{path}[]") for item in value]
+        _seen.add(identity)
+        try:
+            return [_portable_value(item, f"{path}[]", _seen) for item in value]
+        finally:
+            _seen.remove(identity)
     if isinstance(value, dict) and all(isinstance(key, str) for key in value):
-        return {key: _portable_value(item, f"{path}.{key}") for key, item in value.items()}
+        _seen.add(identity)
+        try:
+            return {
+                key: _portable_value(item, f"{path}.{key}", _seen)
+                for key, item in value.items()
+            }
+        finally:
+            _seen.remove(identity)
     raise TypeError(f"{path} has unsupported type {type(value).__name__}")
 
 
@@ -560,7 +752,7 @@ def _generated_cpp(
             body_lines.append(line)
     body = _normalize_cpp("".join(body_lines))
     declarations = set(CPP_DECLARATION.findall(body))
-    names = sorted(set(valid_state) | declarations)
+    names = sorted(block.outputs) if _has_contract(block) else sorted(set(valid_state) | declarations)
 
     bindings = "\n".join(
         f'    conflate::Value {name} = _conflate_input_state.at("{name}");'
@@ -690,40 +882,59 @@ def _ensure_foreign_artifact(
     index: int,
     state_names: set[str],
     build_root: Path,
+    output_names: set[str] | None = None,
 ):
     try:
         if language == "javascript":
-            return ensure_javascript(block.source, index, state_names, build_root)
+            return ensure_javascript(block.source, index, state_names, build_root, output_names)
         if language == "java":
-            return ensure_java(block.source, index, state_names, build_root)
+            return ensure_java(block.source, index, state_names, build_root, output_names)
         if language == "go":
-            return ensure_go(block.source, index, state_names, build_root)
-        return ensure_rust(block.source, index, state_names, build_root)
+            return ensure_go(block.source, index, state_names, build_root, output_names)
+        return ensure_rust(block.source, index, state_names, build_root, output_names)
     except BackendError as error:
         raise ConflateError(str(error)) from error
 
 
-def _precompile_native_blocks(source: str, runtime_source_path: Path) -> None:
+def _precompile_native_blocks(
+    source: str, runtime_source_path: Path, build_root: Path | None = None
+) -> None:
     blocks, functions = prepare_program(parse_program(source, str(runtime_source_path)))
-    build_root = runtime_source_path.parent / ".conflate" / "build"
+    build_root = build_root or runtime_source_path.parent / ".conflate" / "build"
     build_root.mkdir(parents=True, exist_ok=True)
     names: set[str] = set()
     for index, block in enumerate(blocks, start=1):
         language = language_for(block.language)
         if language not in {"python", "external"}:
-            block = Block(block.language, decorate(block.source, language, functions), block.start_line)
+            block = Block(
+                block.language,
+                decorate(block.source, language, functions),
+                block.start_line,
+                block.inputs,
+                block.outputs,
+            )
+        input_names = set(block.inputs or {}) if _has_contract(block) else set(names)
         if language == "python":
-            names.update(_python_assigned_names(block, runtime_source_path))
+            if _has_contract(block):
+                names.update(block.outputs or {})
+            else:
+                names.update(_python_assigned_names(block, runtime_source_path))
         elif language == "cpp":
             _, _, output_names = _ensure_cpp_executable(
-                block, index, names, runtime_source_path, build_root
+                block, index, input_names, runtime_source_path, build_root
             )
-            names = set(output_names)
+            names = (names | set(block.outputs or {})) if _has_contract(block) else set(output_names)
         elif language != "external":
-            names = set(
-                _ensure_foreign_artifact(language, block, index, names, build_root).output_names
-            )
-    runner = Runner(runtime_source_path)
+            output_names = _ensure_foreign_artifact(
+                language,
+                block,
+                index,
+                input_names,
+                build_root,
+                set(block.outputs) if _has_contract(block) else None,
+            ).output_names
+            names = (names | set(block.outputs or {})) if _has_contract(block) else set(output_names)
+    runner = Runner(runtime_source_path, build_root=build_root)
     runner.toolchains = {language_for(b.language): registrations().get(b.language, {}) for b in blocks}
     for language in {f.language for f in functions} - {"python"}:
         runner.prepare_worker(language, worker_source(language, [f for f in functions if f.language == language], functions))
@@ -753,7 +964,13 @@ class Runner:
                 elif language == "external":
                     self._run_external(block, index)
                 else:
-                    block = Block(block.language, decorate(block.source, language, functions), block.start_line)
+                    block = Block(
+                        block.language,
+                        decorate(block.source, language, functions),
+                        block.start_line,
+                        block.inputs,
+                        block.outputs,
+                    )
                     if language == "cpp":
                         self._run_cpp(block, index)
                     else:
@@ -780,32 +997,81 @@ class Runner:
         output = directory / ("block.exe" if os.name == "nt" else "block")
         state = directory / "state.json"
         substitutions = {"source": str(source), "output": str(output), "state": str(state)}
-        self.calls.write(state, self.state) if self.calls else state.write_text(json.dumps(self.state), encoding="utf-8")
+        imported = _validate_contract_inputs(block, self.state, self.source_path)
+        self.calls.write(state, imported) if self.calls else state.write_text(json.dumps(imported), encoding="utf-8")
         for command in ([entry["compile"]] if entry.get("compile") and not output.exists() else []) + [entry["run"]]:
             result = subprocess.run([part.format_map(substitutions) for part in command], env=self.calls.environment() if self.calls else None)
             if result.returncode:
                 raise ConflateError(f"@{block.language} command failed with exit code {result.returncode}")
-        self.state = json.loads(state.read_text(encoding="utf-8"))
-        if not isinstance(self.state, dict):
+        loaded = json.loads(state.read_text(encoding="utf-8"))
+        if not isinstance(loaded, dict):
             raise ConflateError("external language shared state must be an object")
+        if self.calls:
+            loaded.update(self.calls.python_updates)
+            self.calls.python_updates.clear()
+        self.state = _merge_contract_state(block, self.state, loaded, self.source_path)
 
     def _run_python(self, block: Block) -> None:
-        self.environment.update(self.state)
+        previous = dict(self.state)
+        imported = _validate_contract_inputs(block, previous, self.source_path)
+        baseline_nonportable: dict[str, Any] = {}
+        if _has_contract(block):
+            for name, value in self.environment.items():
+                try:
+                    _portable_value(value, name)
+                except TypeError:
+                    baseline_nonportable[name] = value
+            for name in previous:
+                if name not in imported:
+                    self.environment.pop(name, None)
+            self.environment.update(imported)
+        else:
+            self.environment.update(previous)
         padded = "\n" * (block.start_line - 1) + block.source
         try:
             code = compile(padded, str(self.source_path), "exec")
             exec(code, self.environment, self.environment)
         except Exception as error:
             raise ConflateError(f"Python block failed: {error}") from error
-        self.state = _snapshot_python_environment(self.environment)
+        if _has_contract(block):
+            loaded = _contract_python_outputs(block, self.environment, self.source_path)
+            self.state = _merge_contract_state(block, previous, loaded, self.source_path)
+            # Keep definitions and callbacks persistent, while restoring shared values
+            # to the boundary-visible state so temporary undeclared assignments do not leak.
+            for name, value in list(self.environment.items()):
+                if name.startswith("__"):
+                    continue
+                try:
+                    _portable_value(value, name)
+                except TypeError:
+                    if (
+                        name not in baseline_nonportable
+                        and not isinstance(
+                            value,
+                            (
+                                types.FunctionType,
+                                types.BuiltinFunctionType,
+                                types.ModuleType,
+                                type,
+                            ),
+                        )
+                    ):
+                        self.environment.pop(name, None)
+                    continue
+                if name not in self.state:
+                    self.environment.pop(name, None)
+            self.environment.update(self.state)
+        else:
+            self.state = _snapshot_python_environment(self.environment)
         if self.calls:
             self.calls.python_updates.clear()
 
     def _run_cpp(self, block: Block, index: int) -> None:
+        imported = _validate_contract_inputs(block, self.state, self.source_path)
         executable, state_path, _ = _ensure_cpp_executable(
-            block, index, set(self.state), self.source_path, self.build_root
+            block, index, set(imported), self.source_path, self.build_root
         )
-        state_path.write_text(json.dumps(self.state, ensure_ascii=False), encoding="utf-8")
+        state_path.write_text(json.dumps(imported, ensure_ascii=False), encoding="utf-8")
         result = subprocess.run([str(executable), str(state_path)], env=self.calls.environment() if self.calls else None)
         if result.returncode:
             raise ConflateError(f"C++ block failed with exit code {result.returncode}")
@@ -815,17 +1081,23 @@ class Runner:
             raise ConflateError(f"C++ block produced invalid shared state: {error}") from error
         if not isinstance(loaded, dict):
             raise ConflateError("C++ block shared state must be an object")
-        self.state = loaded
         if self.calls:
-            self.state.update(self.calls.python_updates)
+            loaded.update(self.calls.python_updates)
             self.calls.python_updates.clear()
+        self.state = _merge_contract_state(block, self.state, loaded, self.source_path)
 
     def _run_foreign(self, language: str, block: Block, index: int) -> None:
+        imported = _validate_contract_inputs(block, self.state, self.source_path)
         artifact = _ensure_foreign_artifact(
-            language, block, index, set(self.state), self.build_root
+            language,
+            block,
+            index,
+            set(imported),
+            self.build_root,
+            set(block.outputs) if _has_contract(block) else None,
         )
         artifact.state_path.write_text(
-            json.dumps(self.state, ensure_ascii=False), encoding="utf-8"
+            json.dumps(imported, ensure_ascii=False), encoding="utf-8"
         )
         result = subprocess.run([*artifact.command, str(artifact.state_path)], env=self.calls.environment() if self.calls else None)
         if result.returncode:
@@ -836,10 +1108,10 @@ class Runner:
             raise ConflateError(f"{language.title()} block produced invalid shared state: {error}") from error
         if not isinstance(loaded, dict):
             raise ConflateError(f"{language.title()} block shared state must be an object")
-        self.state = loaded
         if self.calls:
-            self.state.update(self.calls.python_updates)
+            loaded.update(self.calls.python_updates)
             self.calls.python_updates.clear()
+        self.state = _merge_contract_state(block, self.state, loaded, self.source_path)
 
 
 def check_file(source_path: Path) -> list[Block]:
@@ -881,6 +1153,9 @@ def compile_executable(source_path: Path, output_path: Path, *, force: bool = Fa
 #include <fstream>
 #include <iostream>
 #include <string>
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
 
 int main() {{
     const std::string source = R"{delimiter}({source}){delimiter}";
@@ -902,7 +1177,14 @@ int main() {{
     const int result = std::system(command.c_str());
     std::error_code ignored;
     std::filesystem::remove(temporary, ignored);
+    #ifndef _WIN32
+    if (result == -1) return 1;
+    if (WIFEXITED(result)) return WEXITSTATUS(result);
+    if (WIFSIGNALED(result)) return 128 + WTERMSIG(result);
+    return 1;
+    #else
     return result;
+    #endif
 }}
 '''
 

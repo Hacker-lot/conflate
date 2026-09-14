@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .build import build_source, print_doctor, run_build
 from .compiler import ConflateError, Runner, check_file, compile_executable
 from .languages import register, registrations, save, add_manifest
 
@@ -18,6 +19,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"Conflate {__version__}")
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("-c", "--compile", dest="compile_source", type=Path, metavar="FILE.CONFL")
+    action.add_argument("--build", dest="build_source", type=Path, metavar="FILE.CONFL")
+    action.add_argument("--run-build", dest="run_build", type=Path, metavar="DIRECTORY")
     action.add_argument("-r", "--run", dest="run_executable", type=Path, metavar="FILE.EXE")
     action.add_argument("--check", dest="check_source", type=Path, metavar="FILE.CONFL")
     action.add_argument("--add-language", nargs=2, metavar=("NAME", "COMPILER"))
@@ -26,13 +29,21 @@ def _parser() -> argparse.ArgumentParser:
     action.add_argument("--language-manifest", type=Path)
     parser.add_argument("--backend", choices=["python", "cpp", "java", "go", "rust", "javascript"])
     action.add_argument(
+        "--run-source",
+        dest="run_source",
+        type=Path,
+        metavar="FILE.CONFL",
+        help="execute a Conflate source file",
+    )
+    action.add_argument(
         "--execute-source",
         dest="run_source",
         type=Path,
         metavar="FILE.CONFL",
         help=argparse.SUPPRESS,
     )
-    parser.add_argument("-o", "--output", type=Path, help="output path used with -c")
+    action.add_argument("--doctor", action="store_true", help="report available language toolchains")
+    parser.add_argument("-o", "--output", type=Path, help="output path used with -c or --build")
     parser.add_argument("--force", action="store_true", help="replace an existing output")
     return parser
 
@@ -58,6 +69,18 @@ def main(argv: list[str] | None = None) -> int:
             print("Built in: python, cpp, rust, java, go")
             for name, entry in registrations().items():
                 print(f"@{name}: {entry['backend']} {entry.get('compiler', entry.get('run'))}")
+            return 0
+        if arguments.doctor:
+            print_doctor()
+            return 0
+        if arguments.build_source is not None:
+            if arguments.output is None:
+                raise ConflateError("--build requires -o DIRECTORY")
+            built = build_source(arguments.build_source, arguments.output, force=arguments.force)
+            print(f"Built {arguments.build_source} -> {built}")
+            return 0
+        if arguments.run_build is not None:
+            run_build(arguments.run_build)
             return 0
         if arguments.compile_source is not None:
             source = arguments.compile_source
