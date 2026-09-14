@@ -4,24 +4,27 @@
 
 <h1 align="center">Conflate</h1>
 
-<p align="center">One program. Several languages. Explicit boundaries.</p>
+<p align="center">Use the language that fits each part of the job.</p>
 
 [![Tests](https://github.com/Hacker-lot/conflate/actions/workflows/tests.yml/badge.svg)](https://github.com/Hacker-lot/conflate/actions)
 
-Conflate is an experimental polyglot programming language for composing Python,
-C++, Rust, Java, and Go in one `.confl` file. Keep each language's syntax, declare
-what crosses a block boundary, and let Conflate generate the value bridges and
-native entry points.
+Conflate is an experimental polyglot language that puts Python, C++, Rust, Java, and Go in one
+`.confl` file. Each block keeps the syntax and libraries of its language. You
+choose what crosses a block boundary, and Conflate prepares the entry points and
+value bridges.
 
-Native code is compiled by real toolchains. Conflate's own language layer defines
-block order, shared values, typed inputs and outputs, and cross-language calls.
-It is useful for small mixed-language tools and experiments; JSON copying and
-process boundaries make it a poor fit for tight per-element cross-language loops.
+That makes it possible to use the language that fits each part of a small tool:
+Python for quick data handling and its large ecosystem, Rust for memory-safe
+parsing and checked arithmetic, C++ for existing native code, and Java for the
+libraries your project already uses. Go and optional PHP or JavaScript backends
+fit the same model. Conflate handles the data exchange so you can work on each
+part without writing a separate wrapper for it.
 
-![A walkthrough of Python, C++, Rust, Java and Go exchanging a typed value](assets/polyglot-tour.gif)
+![Python, C++, Rust, Java and Go exchanging a typed value](assets/polyglot-tour.gif)
 
-The [polyglot tour](docs/POLYGLOT-TOUR.md) runs all five built-in languages.
-The animation is a source walkthrough generated after a verified run.
+The [polyglot tour](docs/POLYGLOT-TOUR.md) runs all five built-in languages and
+is a compact way to see the syntax. For a more practical first example, start
+with the [Python and Rust orders example](examples/rust-python-orders.confl).
 
 ## Languages and extension paths
 
@@ -77,32 +80,19 @@ Python and Conflate remain required, alongside the native runtimes in use.
 
 ## A quick example
 
-```cpp
-@python
-
-def fib(n):
-    if n <= 1:
-        return n
-    return fib(n - 1) + fib(n - 2)
-
-@cpp
-
-int n;
-std::cin >> n;
-
-@python
-
-print(fib(n))
-```
-
-Save that as `fib.confl`, then compile and run it:
+The [Python and Rust orders example](examples/rust-python-orders.confl) shows
+the division of labor Conflate is meant for. Python supplies order rows as
+strings and formats a configurable report. Rust parses quantities and cents,
+uses checked arithmetic, and rejects malformed, negative, or overflowing rows.
+That keeps the input handling flexible while putting the arithmetic and failure
+cases in a small, memory-safe Rust block.
 
 ```powershell
-conflate -c fib.confl
-conflate -r fib.exe
+conflate --run-source examples/rust-python-orders.confl
 ```
 
-Enter `10`; Conflate prints `55`.
+The [example notes](docs/RUST-PYTHON.md) show the sample output and explain the
+validation choices.
 
 ## Install from source
 

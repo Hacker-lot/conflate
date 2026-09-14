@@ -1,8 +1,4 @@
-"""Run and render the reproducible polyglot tour as a small walkthrough GIF.
-
-The GIF is deliberately a source-and-output walkthrough. It is not a screen
-recording, and it does not claim a runtime or speed result.
-"""
+"""Run the polyglot tour and render its source and output as a GIF."""
 
 from __future__ import annotations
 
@@ -100,7 +96,7 @@ def _base() -> tuple[Image.Image, ImageDraw.ImageDraw]:
     draw.rectangle((0, 0, WIDTH, 8), fill=ACCENT)
     _text(draw, (58, 34), "CONFLATE", _font(24), ACCENT)
     _text(draw, (220, 37), "POLYGLOT TOUR", _font(18), MUTED)
-    badge = "WALKTHROUGH  •  NOT A SCREEN RECORDING"
+    badge = "SOURCE + OUTPUT"
     badge_font = _font(16)
     badge_width = draw.textbbox((0, 0), badge, font=badge_font)[2]
     draw.rounded_rectangle((WIDTH - badge_width - 86, 29, WIDTH - 58, 62), radius=14, fill="#20344a")
@@ -113,7 +109,7 @@ def _title_frame() -> Image.Image:
     _text(draw, (72, 142), "One typed value,", _font(58))
     _text(draw, (72, 211), "six language blocks.", _font(58), ACCENT)
     _text(draw, (76, 317), "Python  →  C++  →  Rust  →  Java  →  Go  →  Python", _font(25), ORANGE)
-    _text(draw, (76, 382), "A concise source walkthrough generated after a real local run.", _font(22), MUTED)
+    _text(draw, (76, 382), "Follow a value through Python, C++, Rust, Java, and Go.", _font(22), MUTED)
     _rounded(draw, (76, 500, 532, 584), PANEL)
     _text(draw, (102, 522), "typed boundaries", _font(22), TEXT)
     _text(draw, (102, 553), "seed:int → ... → go_value:int", _font(18), MUTED)
@@ -152,7 +148,7 @@ def _output_frame(output: str) -> Image.Image:
     _rounded(draw, (72, 288, 1208, 442), PANEL_DARK, 18)
     _text(draw, (108, 346), output, _font(25, mono=True), TEXT)
     _text(draw, (74, 518), "Every number is checked by the final Python block.", _font(22), ORANGE)
-    _text(draw, (74, 565), "Walkthrough only • no runtime or speed claim", _font(21), MUTED)
+    _text(draw, (74, 565), "Run it yourself: conflate --run-source examples/polyglot-tour.confl", _font(21), MUTED)
     return image
 
 

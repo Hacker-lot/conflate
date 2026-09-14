@@ -2,20 +2,43 @@
 layout: default
 ---
 
-# One program. Several languages.
+# Use the language that fits each part of the job
 
-Conflate is an experimental polyglot language for composing Python, C++, Rust,
-Java, and Go blocks in a single `.confl` file. The host-language syntax stays
-familiar. Conflate generates the entry points and JSON bridges between blocks.
+Conflate is an experimental polyglot language for using Python, C++, Rust, Java, and Go in one
+`.confl` file. Each block keeps the language's normal syntax and libraries. You
+declare the values a block reads and publishes; Conflate prepares the entry
+points and JSON bridges between them.
+
+The point is practical: use Python where quick data handling and its ecosystem
+save time, Rust where memory-safe parsing and checked arithmetic matter, C++ for
+native code you already have, and Java for an existing library or service. Go,
+PHP, and JavaScript can fit the same setup through their supported integrations.
+Conflate handles the data exchange, so you can change the Python workflow
+without rewriting the Rust code or building a separate wrapper.
 
 [View the source](https://github.com/Hacker-lot/conflate) ·
 [Install the release](https://github.com/Hacker-lot/conflate/releases/tag/v0.4.0) ·
 [Read the language specification](https://github.com/Hacker-lot/conflate/blob/main/docs/LANGUAGE.md)
 
-![Conflate's five-language walkthrough](https://raw.githubusercontent.com/Hacker-lot/conflate/main/assets/polyglot-tour.gif)
+![Python, C++, Rust, Java and Go exchanging a typed value](https://raw.githubusercontent.com/Hacker-lot/conflate/main/assets/polyglot-tour.gif)
 
-This is a source-and-output walkthrough generated after a real run, not a
-real-time screen recording or a benchmark.
+The animation comes from the five-language example below. It is a compact way
+to see the syntax; the smaller Python and Rust example shows a more typical use
+of the runtime.
+
+## Start with Python and Rust
+
+The [orders example](https://github.com/Hacker-lot/conflate/blob/main/examples/rust-python-orders.confl)
+has Python provide order rows as strings and format the final report. Rust
+parses the quantities and cents, uses checked arithmetic, and rejects malformed,
+negative, or overflowing rows. Change the report in Python; keep the validation rules together in Rust.
+
+```sh
+conflate --run-source examples/rust-python-orders.confl
+```
+
+The [example notes](https://github.com/Hacker-lot/conflate/blob/main/docs/RUST-PYTHON.md)
+include the sample output and explain the validation choices.
 
 ## Try the full tour
 

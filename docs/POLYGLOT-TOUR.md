@@ -34,8 +34,7 @@ python scripts/render_launch_demo.py
 The script adds `~/.cargo/bin` to the child process's `PATH` if present, executes
 the tour, verifies the exact output, reads the six source blocks, and writes
 `assets/polyglot-tour.gif`. It fails before writing the GIF if execution or
-verification fails. The GIF is a concise source-and-output walkthrough, not a
-real-time screen recording; it makes no runtime or speed claim.
+verification fails.
 
 The generated launcher still needs the Conflate runtime and the toolchains
 used by its blocks. See [the language specification](LANGUAGE.md) for the

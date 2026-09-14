@@ -5,7 +5,7 @@
 
 ## Product Overview
 
-**One-liner:** One program, several languages, explicit boundaries.
+**One-liner:** Use Python for the workflow, Rust for the careful bits, and keep them in one file.
 **What it does:** Conflate composes ordinary language blocks in a `.confl`
 file. It generates native entry points and JSON bridges, validates typed block
 inputs and outputs, and supports persistent cross-language function workers.
@@ -22,7 +22,13 @@ Primary hypotheses, not validated customer segments: developers prototyping
 mixed-language utilities; language-tool enthusiasts exploring interoperability;
 educators illustrating value boundaries; contributors building more backends.
 
-Useful examples include a value passing through five language toolchains,
+Lead with `examples/rust-python-orders.confl`: Python prepares order data and
+formats a report; Rust validates quantities and prices with checked arithmetic.
+Explain saved integration work and the ability to change each part independently.
+Rust memory safety applies to Rust code, not the entire application. The broader
+concept also includes C++ native code, Java libraries, and PHP workflows.
+
+Other examples include a value passing through five language toolchains,
 data prepared in one language and transformed in another, and adding an
 interpreter through a command manifest. Do not imply that people should split
 a trivial production calculation across five processes for performance.
@@ -63,6 +69,10 @@ The launch should show the code and invite technical evaluation.
 ## Voice and Evidence
 
 Direct, curious, technical, readable. Lead with working source and output.
+The user explicitly rejected robotic slogans, defensive contrasts, and phrases
+such as "walkthrough, not screen recording." Explain what a developer can do
+and why it saves work. Keep implementation caveats in the relevant technical
+section instead of interrupting every benefit with a disclaimer.
 No invented testimonials, benchmarks, urgency, user counts, or engagement.
 No customer interviews or independent testimonials are available yet.
 

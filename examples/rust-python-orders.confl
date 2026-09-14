@@ -1,0 +1,33 @@
+@python(out: orders: str)
+# This could come from a CSV export, an API, or a database query.
+orders = "\n".join([
+    "2,1299",             # quantity, unit price in cents
+    "3,450",
+    "oops,500",           # malformed quantity
+    "-1,999",             # negative quantity
+    "9223372036854775807,2",  # multiplication would overflow i64
+])
+
+@rust(in: orders: str; out: totals: list, rejected: int)
+let mut totals: Vec<i64> = Vec::new();
+let mut rejected: i64 = 0;
+for row in orders.as_str()?.lines() {
+    let total = row.split_once(',').and_then(|(quantity, price)| {
+        let quantity = quantity.trim().parse::<i64>().ok()?;
+        let price = price.trim().parse::<i64>().ok()?;
+        if quantity <= 0 || price < 0 { return None; }
+        quantity.checked_mul(price)
+    });
+    match total {
+        Some(cents) => totals.push(cents),
+        None => rejected += 1,
+    }
+}
+
+@python(in: totals: list, rejected: int)
+# Change the report here without changing the Rust validation code.
+from decimal import Decimal
+currency = "USD"
+revenue = Decimal(sum(totals)) / 100
+print(f"Accepted {len(totals)} orders; rejected {rejected}")
+print(f"Revenue: {currency} {revenue:.2f}")

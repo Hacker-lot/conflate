@@ -13,6 +13,20 @@ from conflate.compiler import Runner, compile_executable
 
 
 class TypedIntegrationTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("rustc"), "rustc required")
+    def test_rust_python_order_validation_example(self):
+        example = Path(__file__).resolve().parents[1] / "examples" / "rust-python-orders.confl"
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / example.name
+            source.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
+            runner = Runner(source)
+            output = io.StringIO()
+            with redirect_stdout(output):
+                runner.run()
+            self.assertEqual(runner.state["totals"], [2598, 1350])
+            self.assertEqual(runner.state["rejected"], 3)
+            self.assertEqual(output.getvalue(), "Accepted 2 orders; rejected 3\nRevenue: USD 39.48\n")
+
     @unittest.skipUnless(shutil.which("g++"), "g++ required")
     def test_compiled_launcher_propagates_runtime_failure(self):
         with tempfile.TemporaryDirectory() as directory:
