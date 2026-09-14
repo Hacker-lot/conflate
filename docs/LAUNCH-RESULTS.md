@@ -14,6 +14,14 @@ count: **1**. The target has not been reached.
 
 ## External outreach
 
+[PLDB language entry, PR #650](https://github.com/breck7/pldb/pull/650) is
+**open as a draft**, pending PLDB formatter/validation checks. It describes
+Conflate as a new programming language and includes the typed example, source,
+and specification. Do not mark this as a published listing.
+
+GitHub traffic checked on September 14: 12 views and 1 unique visitor in the
+API's reporting window; 1 star. These figures do not establish external uptake.
+
 [Submitted the Rust/Python tutorial to This Week in Rust, PR #8746](https://github.com/rust-lang/this-week-in-rust/pull/8746),
 was **withdrawn and closed** after the user corrected the positioning.
 Conflate should be introduced as a new polyglot language. A Rust/Python example
