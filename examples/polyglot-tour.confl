@@ -1,0 +1,19 @@
+@python(out: seed: int)
+seed = 40
+
+@cpp(in: seed: int; out: cpp_value: int)
+int cpp_value = seed.as<int>() + 2;
+
+@rust(in: cpp_value: int; out: rust_value: int)
+let rust_value: i64 = cpp_value.as_i64()? + 1;
+
+@java(in: rust_value: int; out: java_value: int)
+long java_value = conflateInt(rust_value) + 1;
+
+@go(in: java_value: int; out: go_value: int)
+go_value := conflateInt(java_value) + 1
+
+@python(in: seed: int, cpp_value: int, rust_value: int, java_value: int, go_value: int)
+values = (seed, cpp_value, rust_value, java_value, go_value)
+assert values == (40, 42, 43, 44, 45)
+print("Python -> C++ -> Rust -> Java -> Go -> Python: 40, 42, 43, 44, 45")

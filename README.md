@@ -18,6 +18,23 @@ block order, shared values, typed inputs and outputs, and cross-language calls.
 It is useful for small mixed-language tools and experiments; JSON copying and
 process boundaries make it a poor fit for tight per-element cross-language loops.
 
+![A walkthrough of Python, C++, Rust, Java and Go exchanging a typed value](assets/polyglot-tour.gif)
+
+The [polyglot tour](docs/POLYGLOT-TOUR.md) runs all five built-in languages.
+The animation is a source walkthrough generated after a verified run.
+
+## Languages and extension paths
+
+| Languages | Integration |
+| --- | --- |
+| Python, C++, Rust, Java, Go | Built-in value sharing and cross-language function workers |
+| JavaScript / Node.js | Recognized registration with value and function sharing |
+| PHP | Optional [command-manifest JSON bridge](docs/PHP.md), with value sharing; no cross-language function workers |
+| Other runtimes | Command manifests; value sharing requires a bridge for that runtime |
+
+The concept is extensible polyglot programming. Different integrations have
+different capabilities; adding a compiler path alone does not supply a bridge.
+
 ## Explicit boundaries
 
 ```text
@@ -166,6 +183,11 @@ Read [DOCUMENTATION.md](DOCUMENTATION.md) for the execution model, supported
 types, CLI reference, examples, and current limits.
 
 ## Examples worth trying
+
+- [`polyglot-tour.confl`](examples/polyglot-tour.confl) passes a typed value
+  through Python, C++, Rust, Java, and Go in one source file.
+- [`php-roundtrip.confl`](examples/php-roundtrip.confl) uses the optional PHP
+  manifest bridge to pass values from Python through PHP and back.
 
 - [`typed-statistics.confl`](examples/typed-statistics.confl) sends Python data
   to a C++ loop and publishes only the mean and count for Python to format.

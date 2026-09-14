@@ -1,0 +1,11 @@
+@python(out: number: int, label: str)
+number = 21
+label = "Conflate"
+
+@php(in: number: int, label: str; out: answer: int, message: str)
+$answer = $number * 2;
+$message = "{$label} via PHP";
+echo "PHP computed {$answer}\n";
+
+@python(in: answer: int, message: str)
+print(f"{message}: {answer}")
