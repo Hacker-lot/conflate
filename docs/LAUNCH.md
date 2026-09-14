@@ -4,10 +4,12 @@ The launch goal is a small, honest release that people can reproduce quickly:
 clone Conflate, install the documented toolchains, run the typed pipeline, and
 inspect the contract implementation. The working claim is “a polyglot
 orchestration language with explicit typed block boundaries,” backed by the
-source, tests, and the output of `examples/typed-pipeline.confl`.
+source, tests, and the output of `examples/polyglot-tour.confl`. The launch
+demonstrates Python, C++, Rust, Java, and Go together, plus the optional PHP
+command-manifest bridge; it is not limited to Python and C++.
 
 The project starts from 1 GitHub star, checked on 2026-09-14 at 12:10 UTC. The
-three-day observation window ends on 2026-09-17 at 12:10 UTC. Reaching 100
+three-day observation window ends on 2026-09-17 at 12:10 UTC. Reaching at least 101
 stars is an aspiration and a useful signal, not a promise. We will record the
 starting count, the release time, links to each public announcement, and the
 ending count so the result is reproducible.
@@ -78,6 +80,6 @@ before posting.
 At the deadline, record the GitHub star count, forks, release views if GitHub
 exposes them, and the number of substantive issues or discussions. Separate
 organic interest from direct announcements in the notes. Report the actual
-numbers, including a result below 100; the value of the launch is the public,
+numbers, including a result below 101; the value of the launch is the public,
 repeatable demonstration and the quality of the feedback, not a guaranteed
 metric.
