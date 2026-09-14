@@ -5,7 +5,7 @@
 
 ## Product Overview
 
-**One-liner:** Use Python for the workflow, Rust for the careful bits, and keep them in one file.
+**One-liner:** Conflate is a new language for combining multiple programming languages in one program.
 **What it does:** Conflate composes ordinary language blocks in a `.confl`
 file. It generates native entry points and JSON bridges, validates typed block
 inputs and outputs, and supports persistent cross-language function workers.
@@ -22,7 +22,10 @@ Primary hypotheses, not validated customer segments: developers prototyping
 mixed-language utilities; language-tool enthusiasts exploring interoperability;
 educators illustrating value boundaries; contributors building more backends.
 
-Lead with `examples/rust-python-orders.confl`: Python prepares order data and
+Lead with Conflate itself as a new polyglot language. Do not market it as a Rust
+tutorial or a Python/Rust integration product. The user explicitly corrected
+that direction. Choose channels that welcome new languages and developer tools.
+Use `examples/rust-python-orders.confl` as supporting evidence: Python prepares order data and
 formats a report; Rust validates quantities and prices with checked arithmetic.
 Explain saved integration work and the ability to change each part independently.
 Rust memory safety applies to Rust code, not the entire application. The broader
