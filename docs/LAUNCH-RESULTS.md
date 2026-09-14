@@ -14,6 +14,13 @@ count: **1**. The target has not been reached.
 
 ## External outreach
 
+[Submitted the Rust/Python tutorial to This Week in Rust, PR #8746](https://github.com/rust-lang/this-week-in-rust/pull/8746),
+for the September 16 issue. The tutorial explains Rust parsing, `Option`, and
+checked arithmetic with runnable source. AI authorship is disclosed in both
+the article and submission. Status at submission: **open, not accepted**.
+Follow this PR for editorial feedback; do not submit it again elsewhere in the
+same newsletter or as a tooling update.
+
 [Submitted Conflate to Awesome Programming Languages, PR #531](https://github.com/ChessMax/awesome-programming-languages/pull/531).
 This directory explicitly welcomes language authors' contributions. The
 submission adds one alphabetical entry, updates the counts, and discloses
