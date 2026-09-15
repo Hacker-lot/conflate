@@ -1,6 +1,6 @@
 # Launch results
 
-Last recorded: 2026-09-14. Target: at least 101 real GitHub stars by
+Last recorded: 2026-09-15 at 10:30 UTC. Target: at least 101 real GitHub stars by
 2026-09-17 12:10 UTC (20:10 Asia/Shanghai). Starting count: 1; latest checked
 count: **1**. The target has not been reached.
 
@@ -14,13 +14,16 @@ count: **1**. The target has not been reached.
 
 ## External outreach
 
-[PLDB language entry, PR #650](https://github.com/breck7/pldb/pull/650) is
-**ready for review** after Scroll formatting and entry validation passed. The maintainer responded positively and asked about local execution; Conflate source and build commands were rerun successfully. The PLDB HTML build hit a Windows output-path error, disclosed in the PR. It describes
-Conflate as a new programming language and includes the typed example, source,
-and specification. Do not mark this as a published listing.
+[PLDB language entry, PR #650](https://github.com/breck7/pldb/pull/650) was
+**accepted and merged** on September 14 at 16:12:51 UTC. The record is present
+in PLDB's main branch. Live website rendering could not be independently
+checked because the web fetch failed. This is an accepted language-directory
+submission, not evidence of adoption or endorsement of Conflate's design.
 
-GitHub traffic checked on September 14: 12 views and 1 unique visitor in the
-API's reporting window; 1 star. These figures do not establish external uptake.
+GitHub traffic checked on September 15 at 10:30 UTC: 15 views and 3 unique
+visitors in the API's reporting window; 1 star and 0 forks. Release assets each
+report 0 downloads. Recent CI runs succeeded, Pages reports built, and there
+are no open project issues.
 
 [Submitted the Rust/Python tutorial to This Week in Rust, PR #8746](https://github.com/rust-lang/this-week-in-rust/pull/8746),
 was **withdrawn and closed** after the user corrected the positioning.
@@ -34,8 +37,7 @@ submission adds one alphabetical entry, updates the counts, and discloses
 AI assistance. Status at submission: **open, not accepted**. Check the existing
 PR for feedback before considering any further directory submission.
 
-No social-network post has been published. No authenticated social account
-was available. Hacker News does not allow generated or AI-edited submissions,
+The user supplied an [X launch post](https://x.com/io12Parsec/status/2099533934862422432) on September 15. X returns HTTP 403 to the available web reader, so the post contents, engagement, and replies have not been independently checked. No authenticated social account is available to the agent. Hacker News does not allow generated or AI-edited submissions,
 and r/ProgrammingLanguages excludes LLM-generated projects under its current
 rules; neither was used.
 
