@@ -1,8 +1,23 @@
 # Launch results
 
-Last recorded: 2026-09-15 at 10:30 UTC. Target: at least 101 real GitHub stars by
-2026-09-17 12:10 UTC (20:10 Asia/Shanghai). Starting count: 1; latest checked
-count: **1**. The target has not been reached.
+## Final check
+
+Checked September 18, 2026 at 09:48 UTC, after the September 17 12:10 UTC
+deadline. GitHub reports **1 star**, unchanged from the starting count, and
+0 forks. The 100+ star objective was not achieved. No measurement was captured
+at the exact deadline; this is the subsequent verified count.
+
+The traffic API reports 15 views and 3 unique visitors in its reporting window.
+All release assets report 0 downloads. PLDB accepted the language entry;
+Awesome Programming Languages PR #531 remains open. The user supplied an X
+post, whose engagement could not be read. The launch automation is now paused.
+
+The campaign produced too little distribution. Most work went into release
+preparation and documentation, while completed outreach was limited to the
+language directories and the user's X post. The Rust tutorial pitch was a
+positioning mistake and was withdrawn. Prepared newsletter pitches were not
+sent because publishing access was unavailable. These activities did not
+produce the requested growth.
 
 ## Published
 
@@ -43,11 +58,7 @@ rules; neither was used.
 
 ## Follow-up
 
-An active six-hour follow-up checks stars, issues, CI, and submission feedback
-through the deadline. It should act on substantive feedback and suitable
-legitimate opportunities, avoid duplicate announcements, and report meaningful
-changes or the final measured outcome. Do not treat an open PR, a page view, or
-an automation as a gained star.
+The six-hour launch automation was paused after the final check.
 
 The locally installed product-marketing, launch, and social skills guide
 positioning and copy. Public claims must remain grounded in working examples
